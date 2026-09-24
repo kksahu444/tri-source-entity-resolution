@@ -117,18 +117,20 @@ the OOF score, public LB score and config.
 | Plagiarism / code leak during the contest | **Keep the GitHub repo private until results are announced.** |
 | Last-minute failure | Freeze at 16:00 on day 3. Zip built and checked by 21:00. |
 
-## 8. EDA numbers to fill on day 1
+## 8. EDA numbers (train, measured 25 Sep)
 
 | quantity | train value | decision it drives |
 |---|---|---|
-| # S1 / S2 / S3 records | | runtime, k values |
-| singleton rate | | all-empty baseline, how conservative the threshold should be |
-| matches per S1 (distribution) | | expected-F vs threshold |
-| S2 vs S3 share of true pairs | | per-source k |
-| S2/S3 ids matched to more than one S1 | | exclusivity on or off |
-| cross-country true pairs | | whether blocking may stay within one country |
-| % addresses with postcode / landmark | | weight of address blockers |
-| blocking pair recall at default k | | blocking tuning |
+| # S1 / S2 / S3 records | 2.21M / 5.03M / 5.29M (test: 1.73M / 4.89M / 5.08M) | **Scale:** the pipeline must be partitioned or streamed (section 10) |
+| singleton rate | **5.6%** (US and India the same) | Only ~6% of entities are singletons, so recall matters a lot. The all-empty baseline is just ~0.056. |
+| matches per S1 | mean 3.46. Counts for 0/1/2/3/4/5/6/7+: 123k/119k/375k/531k/484k/322k/165k/87k | Typical entity has 2–5 matches. Per-entity top-k (expected-F) fits well. |
+| S2 vs S3 share of true pairs | 48% / 52% | Same k per source |
+| S2/S3 ids matched to more than one S1 | **0** | Exclusivity holds exactly, so keep it on |
+| cross-country true pairs | **0** | Blocking can safely partition by country |
+| S2 / S3 records with no S1 match | 27% / 25% | Many distractors, so precision still matters |
+| empty name / address in S1 | 0% / 0% | |
+| % addresses with postcode / landmark | TBD (`eda` on a sample) | weight of address blockers |
+| blocking pair recall at default k | TBD | blocking tuning |
 
 ## 9. Definition of done
 
@@ -137,3 +139,19 @@ the OOF score, public LB score and config.
 - [ ] `docs/METHODOLOGY.md` filled in (methodology, blocking, model and features, other details)
 - [ ] Clean-environment rerun reproduces the submitted files
 - [ ] `<TEAM>_submission.zip` uploaded with the required layout
+
+## 10. Scale: the most urgent engineering task
+
+The code in this repo was validated on synthetic data of a few thousand rows. The real data has
+about 12.5M records per split. A 16 GB laptop cannot hold one global TF-IDF index over all records
+or build features for 70M+ candidate pairs in one go. Changes needed, in order:
+
+1. **Partition by country**, which is safe because there are 0 cross-country pairs. Then partition by
+   a coarse geographic key parsed from the address (state/city, or PIN/ZIP prefix), with a name-only
+   fallback for records that have none. Run blocking independently per partition.
+2. **Train on a sample** of 150–300k S1 entities with all their candidates. Grouped CV on that
+   sample is plenty for a GBDT.
+3. **Stream test inference** one partition at a time, appending to the output files.
+4. Replace the pandas row loops in normalisation and features with vectorised code or
+   multiprocessing (12 logical cores available locally).
+5. If local runs are too slow, use the AWS credits (for example SageMaker `ml.m5.4xlarge`, 64 GB RAM).

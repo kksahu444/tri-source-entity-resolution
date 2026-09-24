@@ -10,6 +10,7 @@
     python main.py all                 # train + predict
     python main.py score --truth T     # macro F0.5 of output/matching_results.tsv against labels T
     python main.py synth               # synthetic data for smoke tests
+    python main.py fetch-data          # download the dataset from the repo's GitHub Release
 """
 from __future__ import annotations
 
@@ -70,6 +71,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("score")
     p.add_argument("--truth", required=True, help="ground-truth TSV (source1_entity_id, matched_entity_ids)")
     p.add_argument("--pred", help="predictions TSV (default: <output-dir>/matching_results.tsv)")
+    p = sub.add_parser("fetch-data", help="download dataset-v1 release assets into --data-dir")
+    p.add_argument("--keep-archives", action="store_true")
     p = sub.add_parser("synth")
     p.add_argument("--out", default="data_synthetic")
     p.add_argument("--n-train", type=int, default=1500)
@@ -130,6 +133,9 @@ def main(argv: list[str] | None = None) -> int:
         pred = read_tsv_lists(pred_path)
         truth = read_ground_truth(args.truth)
         print(f"macro F0.5 = {macro_f_beta(pred, truth, truth.keys()):.5f} over {len(truth)} Source-1 entities")
+    elif args.command == "fetch-data":
+        from .fetch_data import fetch
+        print(fetch(cfg.data_dir, keep_archives=args.keep_archives))
     elif args.command == "synth":
         from .synthetic import generate
         print(generate(args.out, args.n_train, args.n_test, args.seed))

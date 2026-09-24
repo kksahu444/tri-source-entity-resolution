@@ -11,7 +11,14 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .io import CANDIDATE_COLUMN, MATCH_COLUMN, read_tsv
+from .io import CANDIDATE_COLUMN, MATCH_COLUMN
+
+
+def _read_first_column(path: Path) -> set[str]:
+    """Entity ids of a source TSV without loading names/addresses (the test files are ~0.5 GB each)."""
+    with open(path, encoding="utf-8-sig") as fh:
+        next(fh, None)
+        return {line.split("\t", 1)[0].strip() for line in fh if line.strip()}
 
 
 def _read_lists(path: Path, column: str, errors: list[str]) -> dict[str, list[str]]:
@@ -46,9 +53,9 @@ def validate_outputs(matching: str | Path, candidates: str | Path, test_dir: str
     """Return ``(errors, warnings)``; an empty error list means the files follow every rule."""
     test_dir = Path(test_dir)
     split = test_dir.name
-    s1_ids = set(read_tsv(test_dir / f"{split}_source1.tsv")["entity_id"])
-    target_ids = set(read_tsv(test_dir / f"{split}_source2.tsv")["entity_id"]) | set(
-        read_tsv(test_dir / f"{split}_source3.tsv")["entity_id"])
+    s1_ids = _read_first_column(test_dir / f"{split}_source1.tsv")
+    target_ids = _read_first_column(test_dir / f"{split}_source2.tsv") | _read_first_column(
+        test_dir / f"{split}_source3.tsv")
     errors: list[str] = []
     warnings: list[str] = []
     parsed = {}

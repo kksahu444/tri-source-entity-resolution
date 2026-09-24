@@ -37,16 +37,36 @@ Planning and background docs:
 
 ---
 
+## Get the data (team members)
+
+The dataset (2.4 GB, files of 127–510 MB) is too big for git, because GitHub rejects files over 100 MB.
+It is attached to the private release
+[`dataset-v1`](https://github.com/kksahu444/tri-source-entity-resolution/releases/tag/dataset-v1).
+Only collaborators can see it.
+
+```bash
+gh auth login                 # once; install gh from https://cli.github.com
+python main.py fetch-data     # download (1.1 GB) -> check SHA-256 -> unpack into dataset/train, dataset/test
+```
+
+You can also download from the release page in a browser. Either take the `*.tsv.gz` files and
+gunzip them into `dataset/train/` and `dataset/test/`, or take the original
+`6ab10eb3b23ba_student_resource.zip` and move its `student_resource/dataset/` folder to `dataset/`.
+The organisers' validator and documentation template are already committed in
+[`student_resource/`](student_resource/).
+
+| split | Source 1 | Source 2 | Source 3 | countries (S1) |
+|---|---|---|---|---|
+| train | 2,206,821 | 5,034,616 | 5,285,603 | US 60%, India 40% |
+| test | 1,732,544 | 4,887,273 | 5,082,316 | India 47%, US 38%, **France 15%** (not in train) |
+
 ## Quickstart
 
 ```bash
 # Python >= 3.11 (developed on 3.14)
 python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-
-# put the organisers' data here (this folder is git-ignored):
-#   dataset/train/train_source{1,2,3}.tsv, dataset/train/train_ground_truth.tsv
-#   dataset/test/test_source{1,2,3}.tsv
+python main.py fetch-data   # -> dataset/ (git-ignored)
 
 python main.py eda          # dataset statistics  -> artifacts/eda_train.json
 python main.py block        # blocking recall ceiling on train

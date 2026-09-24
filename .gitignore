@@ -1,7 +1,8 @@
-# --- challenge data & official resources (never commit: licence + size) ---
+# --- challenge data (too big for git: shared via the `dataset-v1` GitHub Release, see README) ---
 dataset/
-student_resource/
+student_resource/dataset/
 amazon_ml_challenge_2026/
+__MACOSX/
 *.pdf
 *.zip
 
