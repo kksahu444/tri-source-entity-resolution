@@ -5,6 +5,8 @@ amazon_ml_challenge_2026/
 __MACOSX/
 *.pdf
 *.zip
+# the organisers' original data zip is stored with Git LFS (see .gitattributes)
+!student_resource/*.zip
 
 # --- generated ---
 artifacts/

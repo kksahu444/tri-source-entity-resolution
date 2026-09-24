@@ -39,21 +39,32 @@ Planning and background docs:
 
 ## Get the data (team members)
 
-The dataset (2.4 GB, files of 127–510 MB) is too big for git, because GitHub rejects files over 100 MB.
-It is attached to the private release
-[`dataset-v1`](https://github.com/kksahu444/tri-source-entity-resolution/releases/tag/dataset-v1).
-Only collaborators can see it.
+The organisers' original zip (1.09 GB) is committed at
+[`student_resource/6ab10eb3b23ba_student_resource.zip`](student_resource/6ab10eb3b23ba_student_resource.zip)
+using **Git LFS**, because GitHub rejects normal git files over 100 MB. With git-lfs installed (it ships
+with Git for Windows; on macOS run `brew install git-lfs`), `git clone` downloads the real zip automatically.
+
+**Option A: unzip the committed file**
 
 ```bash
-gh auth login                 # once; install gh from https://cli.github.com
-python main.py fetch-data     # download (1.1 GB) -> check SHA-256 -> unpack into dataset/train, dataset/test
+git lfs install                # once per machine
+git clone https://github.com/kksahu444/tri-source-entity-resolution.git
+cd tri-source-entity-resolution
+git lfs pull                   # only needed if the zip shows up as a tiny text pointer
+python -c "import zipfile; zipfile.ZipFile('student_resource/6ab10eb3b23ba_student_resource.zip').extractall('_unzipped')"
+mv _unzipped/student_resource/dataset dataset && rm -rf _unzipped   # the code expects dataset/train, dataset/test
 ```
 
-You can also download from the release page in a browser. Either take the `*.tsv.gz` files and
-gunzip them into `dataset/train/` and `dataset/test/`, or take the original
-`6ab10eb3b23ba_student_resource.zip` and move its `student_resource/dataset/` folder to `dataset/`.
-The organisers' validator and documentation template are already committed in
-[`student_resource/`](student_resource/).
+**Option B: faster download (1.1 GB of gzip files, checksum-verified)** from the private release
+[`dataset-v1`](https://github.com/kksahu444/tri-source-entity-resolution/releases/tag/dataset-v1):
+
+```bash
+gh auth login                  # once; install gh from https://cli.github.com
+python main.py fetch-data      # -> dataset/train, dataset/test
+```
+
+To clone without the 1 GB zip, set `GIT_LFS_SKIP_SMUDGE=1` before `git clone` and use Option B.
+The organisers' validator and documentation template are in [`student_resource/`](student_resource/).
 
 | split | Source 1 | Source 2 | Source 3 | countries (S1) |
 |---|---|---|---|---|
