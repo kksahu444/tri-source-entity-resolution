@@ -1,0 +1,5 @@
+# Optional: dense-embedding blocker/feature (BlockingConfig.use_embeddings = true).
+# Default model intfloat/multilingual-e5-small is MIT-licensed (~118M params),
+# well inside the challenge limit (MIT/Apache-2.0, <= 8B params).
+sentence-transformers>=3.0
+torch>=2.6

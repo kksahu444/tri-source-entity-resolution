@@ -1,0 +1,28 @@
+# --- challenge data & official resources (never commit: licence + size) ---
+dataset/
+student_resource/
+amazon_ml_challenge_2026/
+*.pdf
+*.zip
+
+# --- generated ---
+artifacts/
+output/
+data_synthetic/
+reports/
+*.joblib
+
+# --- python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# --- os / editor ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

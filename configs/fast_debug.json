@@ -1,0 +1,4 @@
+{
+  "blocking": {"name_char_k": 8, "name_word_k": 5, "full_char_k": 8, "addr_word_k": 4},
+  "model": {"n_folds": 3, "stack": false, "num_boost_round": 500}
+}
