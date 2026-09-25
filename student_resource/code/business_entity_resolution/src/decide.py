@@ -1,7 +1,9 @@
 """Stage `decide`: calibration (D6) -> one S1 per record (D7) -> per-entity rule (D8) -> scores.
 
-France gets the pooled US+India thresholds and the offset b_FR (D9; 0 until the
-leave-one-country-out prior has been measured).
+Rules compared out-of-fold: two thresholds (per country), GFM with independence, GFM with the count
+model. The simpler rule is kept unless the paired bootstrap interval of the gain excludes zero.
+France gets the pooled thresholds / count model and the offset b_FR (D9) applied to its calibrated
+probabilities before count features, assignment and the rule.
 """
 from __future__ import annotations
 
@@ -14,15 +16,16 @@ import pandas as pd
 
 from . import calibrate
 from .assign import hard_assign, soft_assign
+from .blocking.union import block_dir
 from .cv import build_dev_universe
-from .decision import two_threshold
-from .featurize import countries
+from .decision import count_model, gfm_rule, two_threshold
+from .featurize import countries, feat_dir
 from .metrics import per_entity, summary
 from .stack import pred_dir
-from .blocking.union import block_dir
 from .utils import Timer, get_logger
 
 log = get_logger()
+AUX = ["src3", "addr_r_empty", "n_parts_q", "q_name_city_crowd"]
 
 
 def _logit(p):
@@ -37,76 +40,139 @@ def apply_offset(p, b):
 def _assign(cfg, ri, p):
     if cfg["flags"]["HARD_ASSIGNMENT"]:
         return hard_assign(ri, p)
-    return soft_assign(ri, p)
+    return np.ones(len(ri), bool)
+
+
+def _soft(cfg, ri, p):
+    return p if cfg["flags"]["HARD_ASSIGNMENT"] else soft_assign(ri, p)
+
+
+def _entity_frame(qi, p, aux, n_s1):
+    first = np.full(n_s1, -1)
+    first[qi[::-1]] = np.arange(len(qi))[::-1]
+    has = first >= 0
+    parts = np.where(has, aux["n_parts_q"].to_numpy()[np.maximum(first, 0)], 0)
+    crowd = np.where(has, aux["q_name_city_crowd"].to_numpy()[np.maximum(first, 0)], 0)
+    return count_model.entity_features(qi, p, aux["src3"].to_numpy(), aux["addr_r_empty"].to_numpy(),
+                                       n_s1, parts, crowd)
+
+
+def _paired_gain_ci(fa, fb, n_boot=1000, seed=0):
+    d = fb - fa
+    rng = np.random.default_rng(seed)
+    means = [d[rng.integers(0, len(d), len(d))].mean() for _ in range(n_boot)]
+    return float(d.mean()), float(np.percentile(means, 2.5)), float(np.percentile(means, 97.5))
 
 
 def run(cfg: dict, split: str = "dev") -> dict:
     t = Timer()
-    pdir = pred_dir(cfg)
+    pdir, fd = pred_dir(cfg), feat_dir(cfg)
     path = os.path.join(cfg["paths"]["artifacts"], "decision.pkl")
     cs = countries(cfg, split)
     res = {"stage": "decide"}
     if split == "dev":
-        dev = build_dev_universe(cfg)
+        dev = build_dev_universe(cfg).set_index("entity_id")
         preds = {c: pd.read_parquet(os.path.join(pdir, f"dev_{c}.parquet")) for c in cs}
+        aux = {c: pd.read_parquet(os.path.join(fd, f"dev_{c}.parquet"), columns=AUX) for c in cs}
         p_all = np.concatenate([preds[c]["p"].to_numpy() for c in cs])
         y_all = np.concatenate([preds[c]["y"].to_numpy() for c in cs])
         iso = calibrate.fit(p_all, y_all, seed=cfg["seed"])
         info = {"ece_raw": round(calibrate.ece(p_all, y_all), 5)}
-        per_c, th = {}, {}
+        E, th = {}, {}
         for c in cs:
             q = pd.read_parquet(os.path.join(block_dir(cfg), f"dev_{c}_q.parquet"), columns=["entity_id"])
-            n_true = dev.set_index("entity_id")["n_true"].reindex(q["entity_id"]).to_numpy()
+            n_true = dev["n_true"].reindex(q["entity_id"]).to_numpy()
+            fold_s1 = dev["fold"].reindex(q["entity_id"]).to_numpy()
             d = preds[c]
             p = iso.predict(d["p"].to_numpy())
             info[f"ece_cal_{c}"] = round(calibrate.ece(p, d["y"].to_numpy()), 5)
             keep = _assign(cfg, d["ri"].to_numpy(), p)
-            per_c[c] = (d["qi"].to_numpy()[keep], p[keep], d["y"].to_numpy()[keep], n_true, d["qi"].to_numpy(), d["y"].to_numpy())
-            th[c] = two_threshold.tune(per_c[c][0], per_c[c][1], per_c[c][2], n_true)
+            p = _soft(cfg, d["ri"].to_numpy(), p)
+            E[c] = {"qi": d["qi"].to_numpy()[keep], "p": p[keep], "y": d["y"].to_numpy()[keep],
+                    "n_true": n_true, "fold": fold_s1, "aux": aux[c][keep].reset_index(drop=True),
+                    "qi_all": d["qi"].to_numpy(), "y_all": d["y"].to_numpy()}
+            th[c] = two_threshold.tune(E[c]["qi"], E[c]["p"], E[c]["y"], n_true)
             log.info("thresholds %s: %s (%.0fs)", c, th[c], t())
-        # pooled thresholds (for France)
-        off, s_all, p_pool, y_pool, nt_pool = 0, [], [], [], []
+        off, parts = 0, []
         for c in cs:
-            s, p, y, nt = per_c[c][:4]
-            s_all.append(s + off); p_pool.append(p); y_pool.append(y); nt_pool.append(nt)
-            off += len(nt)
-        th["pooled"] = two_threshold.tune(np.concatenate(s_all), np.concatenate(p_pool), np.concatenate(y_pool),
-                                          np.concatenate(nt_pool))
-        # final OOF score with per-country thresholds, plus oracles
-        fs, nts, ctry, f_ceiling, f_pooled = [], [], [], [], []
+            parts.append((E[c]["qi"] + off, E[c]["p"], E[c]["y"], E[c]["n_true"]))
+            off += len(E[c]["n_true"])
+        th["pooled"] = two_threshold.tune(*(np.concatenate([x[i] for x in parts]) for i in range(4)))
+        # count model (pooled, no country), cross-fitted on the dev folds
+        X = pd.concat([_entity_frame(E[c]["qi"], E[c]["p"], E[c]["aux"], len(E[c]["n_true"])) for c in cs], ignore_index=True)
+        yc = np.concatenate([count_model.target(E[c]["qi"], E[c]["y"], len(E[c]["n_true"])) for c in cs])
+        fold = np.concatenate([E[c]["fold"] for c in cs])
+        cprob, cmodels, temp = count_model.fit_oof(X, yc, fold, cfg["seed"])
+        info["count_model_temp"] = round(temp, 4)
+        info["count_model_acc"] = round(float((cprob.argmax(1) == yc).mean()), 4)
+        log.info("count model: temp %.3f acc %.4f (%.0fs)", temp, info["count_model_acc"], t())
+        # per-entity F for every rule
+        F = {"two_threshold": [], "gfm_indep": [], "gfm_count": [], "ceiling": []}
+        nts, ctry, off = [], [], 0
         for c in cs:
-            s, p, y, nt, s_raw, y_raw = per_c[c]
-            sel = two_threshold.select(s, p, th[c]["tau1"], th[c]["tau2"])
-            fs.append(per_entity(s, sel, y, nt))
-            selp = two_threshold.select(s, p, th["pooled"]["tau1"], th["pooled"]["tau2"])
-            f_pooled.append(per_entity(s, selp, y, nt))
-            f_ceiling.append(per_entity(s_raw, y_raw == 1, y_raw, nt))   # predict exactly the retrieved true pairs
-            nts.append(nt)
-            ctry.append(np.full(len(nt), c))
-        f, nt, ctry = np.concatenate(fs), np.concatenate(nts), np.concatenate(ctry)
-        res.update(summary(f, nt, ctry))
+            e = E[c]
+            n = len(e["n_true"])
+            sel = two_threshold.select(e["qi"], e["p"], th[c]["tau1"], th[c]["tau2"])
+            F["two_threshold"].append(per_entity(e["qi"], sel, e["y"], e["n_true"]))
+            sel, _ = gfm_rule.select(e["qi"], e["p"], None)
+            F["gfm_indep"].append(per_entity(e["qi"], sel, e["y"], e["n_true"]))
+            sel, _ = gfm_rule.select(e["qi"], e["p"], cprob[off:off + n])
+            F["gfm_count"].append(per_entity(e["qi"], sel, e["y"], e["n_true"]))
+            F["ceiling"].append(per_entity(e["qi_all"], e["y_all"] == 1, e["y_all"], e["n_true"]))
+            nts.append(e["n_true"])
+            ctry.append(np.full(n, c))
+            off += n
+            log.info("rules scored %s (%.0fs)", c, t())
+        F = {k: np.concatenate(v) for k, v in F.items()}
+        nt, ctry = np.concatenate(nts), np.concatenate(ctry)
+        comp = {}
+        for rule in ("gfm_indep", "gfm_count"):
+            g, lo, hi = _paired_gain_ci(F["two_threshold"], F[rule])
+            comp[rule] = {"f05": round(float(F[rule].mean()), 5), "gain_vs_tt": round(g, 5),
+                          "gain_ci": [round(lo, 5), round(hi, 5)],
+                          **{f"f05_{c}": round(float(F[rule][ctry == c].mean()), 5) for c in cs},
+                          "f05_singleton": round(float(F[rule][nt == 0].mean()), 5)}
+        chosen = "two_threshold"
+        best_gain = 0.0
+        for rule in ("gfm_indep", "gfm_count"):
+            if comp[rule]["gain_ci"][0] > 0 and comp[rule]["gain_vs_tt"] > best_gain:
+                chosen, best_gain = rule, comp[rule]["gain_vs_tt"]
+        res.update(summary(F[chosen], nt, ctry))
         res["notes"] = json.dumps({
-            **info, "thresholds": th,
-            "oof_pooled_thresholds": round(float(np.concatenate(f_pooled).mean()), 5),
-            "oracle_candidate_ceiling": round(float(np.concatenate(f_ceiling).mean()), 5),
-            "oracle_perfect_singleton": round(float(np.where(nt == 0, 1.0, f).mean()), 5),
+            **info, "rule": chosen, "thresholds": th, "rule_comparison": comp,
+            "oof_f05_two_threshold": round(float(F["two_threshold"].mean()), 5),
+            "oracle_candidate_ceiling": round(float(F["ceiling"].mean()), 5),
+            "oracle_perfect_singleton": round(float(np.where(nt == 0, 1.0, F[chosen]).mean()), 5),
             "all_empty_score": round(float((nt == 0).mean()), 5)})
-        pickle.dump({"iso": iso, "thresholds": th, "b_fr": 0.0}, open(path, "wb"))
+        prev = pickle.load(open(path, "rb")) if os.path.exists(path) else {}
+        pickle.dump({"iso": iso, "thresholds": th, "rule": chosen, "count_models": cmodels, "count_temp": temp,
+                     "b_fr": prev.get("b_fr", 0.0)}, open(path, "wb"))
     else:
         dec = pickle.load(open(path, "rb"))
         out = []
         for c in cs:
             d = pd.read_parquet(os.path.join(pdir, f"test_{c}.parquet"))
+            aux = pd.read_parquet(os.path.join(fd, f"test_{c}.parquet"), columns=AUX)
             p = dec["iso"].predict(d["p"].to_numpy())
             if c not in dec["thresholds"]:
                 p = apply_offset(p, dec.get("b_fr", 0.0))
             keep = _assign(cfg, d["ri"].to_numpy(), p)
-            th = dec["thresholds"].get(c, dec["thresholds"]["pooled"])
-            s, pk = d["qi"].to_numpy()[keep], p[keep]
-            sel = two_threshold.select(s, pk, th["tau1"], th["tau2"])
-            out.append(pd.DataFrame({"country": c, "qi": s[sel], "ri": d["ri"].to_numpy()[keep][sel], "p": pk[sel]}))
+            p = _soft(cfg, d["ri"].to_numpy(), p)
+            s, pk, rk = d["qi"].to_numpy()[keep], p[keep], d["ri"].to_numpy()[keep]
+            n_s1 = int(pd.read_parquet(os.path.join(block_dir(cfg), f"test_{c}_q.parquet"), columns=["entity_id"]).shape[0])
+            if dec["rule"] == "two_threshold":
+                th = dec["thresholds"].get(c, dec["thresholds"]["pooled"])
+                sel = two_threshold.select(s, pk, th["tau1"], th["tau2"])
+            else:
+                cp = None
+                if dec["rule"] == "gfm_count":
+                    X = _entity_frame(s, pk, aux[keep].reset_index(drop=True), n_s1)
+                    cp = count_model.predict(dec["count_models"], dec["count_temp"], X)
+                sel, _ = gfm_rule.select(s, pk, cp)
+            out.append(pd.DataFrame({"country": c, "qi": s[sel], "ri": rk[sel], "p": pk[sel]}))
             res[f"n_matches_{c}"] = int(sel.sum())
-            log.info("decide test %s: %d matches, thresholds %s", c, sel.sum(), th)
+            log.info("decide test %s: %d matches (%s, b_fr %.2f) (%.0fs)", c, sel.sum(), dec["rule"],
+                     dec.get("b_fr", 0.0) if c not in dec["thresholds"] else 0.0, t())
         pd.concat(out, ignore_index=True).to_parquet(os.path.join(pdir, "test_selected.parquet"), index=False)
     res["runtime_s"] = t()
     return res
