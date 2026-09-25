@@ -1,0 +1,28 @@
+seed: 2026
+paths:                               # relative to code/business_entity_resolution/
+  dataset: ../../dataset
+  artifacts: ../../artifacts
+  runs: ../../runs
+  output: ../../output
+  submissions: ../../submissions
+flags:
+  ALLOW_TEST_PRED_FIT: false         # Q2
+  ALLOW_LIBPOSTAL: false             # Q1
+  ALLOW_HANDWRITTEN_LISTS: false     # Q3
+  ALLOW_LLM_AUGMENTATION: false      # Q4, keep false
+  USE_MMBERT_IN_FINAL: false         # Q6
+  COUNTRY_BLOCKING: true             # D0 block 6: 0 cross-country pairs of 7,638,365
+  HARD_ASSIGNMENT: true              # D0 block 7: 0 records matched to 2+ S1
+  TRANSLITERATE: true                # anyascii (ISC) romanisation of Indic scripts; see README open questions
+normalize:
+  legal_min_share: 0.01              # legal-form tokens: share of S1 names ending with the token (per country)
+  region_min_share: 0.0005           # S1 last address parts kept as regions
+  workers: 10
+dev:
+  city_group_share: 0.30             # share of (country, city) groups in the dev universe
+  orphan_share: 0.19                 # D0 block 2: dev S1 dropped from the queries, records kept as distractors
+blocking: {k_tfidf: 30, k_bm25: 30, k_dense: 30, crowd_cap: 10, key_block_cap: 200, query_chunk: 100000}
+prune: {pc_tolerance: 0.005, reverse_keep: 3}
+cross_encoder: {backbone: auto, max_len: auto, band: auto, epochs: 2}
+decision: {rule: two_threshold, max_m: 30}   # later gfm_count or gfm_indep, whichever wins out-of-fold
+france: {offset: loco_prior}                 # distribution_matching | em only if ALLOW_TEST_PRED_FIT
