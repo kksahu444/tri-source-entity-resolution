@@ -1,7 +1,7 @@
 """D9 default: leave-one-country-out offset prior for France (ALLOW_TEST_PRED_FIT = false).
 
-For each direction (US -> India, India -> US): stage-A LightGBM trained on the source country only
-(5-fold OOF there for calibration and thresholds), then applied to the held-out country. The oracle
+For each direction (US -> India, India -> US): stage-A LightGBM trained on source folds 0-3 only
+(calibration and thresholds on source fold 4), then applied to the held-out country. The oracle
 offset b* maximises the held-out F0.5 of p' = sigmoid(logit(p) + b) under the source thresholds.
 b_FR = mean of the two b*. The offset + temperature variant sigmoid(a * logit(p) + b) is also fitted.
 """
@@ -38,8 +38,9 @@ def _logit(p):
 def _load(cfg, c, dev):
     df = pd.read_parquet(os.path.join(feat_dir(cfg), f"dev_{c}.parquet"))
     q = pd.read_parquet(os.path.join(block_dir(cfg), f"dev_{c}_q.parquet"), columns=["entity_id"])
-    n_true = dev.set_index("entity_id")["n_true"].reindex(q["entity_id"]).to_numpy()
-    return df, n_true
+    d = dev.set_index("entity_id")
+    n_true = d["n_true"].reindex(q["entity_id"]).to_numpy()
+    return df, n_true, d["fold"].reindex(q["entity_id"]).to_numpy()
 
 
 def _f(qi, ri, p, y, n_true, th):
@@ -50,22 +51,24 @@ def _f(qi, ri, p, y, n_true, th):
 
 def direction(cfg, src, tgt, rounds, dev):
     t = Timer()
-    ds, nts = _load(cfg, src, dev)
-    dt_, ntt = _load(cfg, tgt, dev)
+    ds, nts, s1_fold = _load(cfg, src, dev)
+    dt_, ntt, _ = _load(cfg, tgt, dev)
     cols = [c for c in ds.columns if c not in META]
     Xs, ys, fold = ds[cols].to_numpy(np.float32), ds["y"].to_numpy(), ds["fold"].to_numpy()
     Xt = dt_[cols].to_numpy(np.float32)
-    oof, pt = np.zeros(len(ds), np.float32), np.zeros(len(dt_))
     params = {**PARAMS, "seed": cfg["seed"]}
-    for f in range(5):
-        m = lgb.train(params, lgb.Dataset(Xs[fold != f], ys[fold != f]), rounds)
-        oof[fold == f] = m.predict(Xs[fold == f])
-        pt += m.predict(Xt) / 5
-    iso = calibrate.fit(oof, ys, seed=cfg["seed"])
-    ps = iso.predict(oof)
-    qs, rs = ds["qi"].to_numpy(), ds["ri"].to_numpy()
+    # one model per direction: trained on source folds 0-3, calibrated/tuned on source fold 4
+    tr, ho = fold != 4, fold == 4
+    m = lgb.train(params, lgb.Dataset(Xs[tr], ys[tr]), rounds)
+    ph, pt = m.predict(Xs[ho]), m.predict(Xt)
+    iso = calibrate.fit(ph, ys[ho], seed=cfg["seed"])
+    ps = iso.predict(ph)
+    qs, rs, yh = ds["qi"].to_numpy()[ho], ds["ri"].to_numpy()[ho], ys[ho]
+    ent = s1_fold == 4
+    remap = -np.ones(len(nts), np.int64)
+    remap[ent] = np.arange(ent.sum())
     keep = hard_assign(rs, ps)
-    th = two_threshold.tune(qs[keep], ps[keep], ys[keep], nts)
+    th = two_threshold.tune(remap[qs[keep]], ps[keep], yh[keep], nts[ent])
     pcal = iso.predict(pt)
     qt, rt, yt = dt_["qi"].to_numpy(), dt_["ri"].to_numpy(), dt_["y"].to_numpy()
     lg = _logit(pcal)
@@ -78,7 +81,7 @@ def direction(cfg, src, tgt, rounds, dev):
         for b in B_GRID[::2]:
             temp[(float(a), float(b))] = _f(qt, rt, 1 / (1 + np.exp(-(a * lg + b))), yt, ntt, th)
     best_ab = max(temp, key=temp.get)
-    out = {"src": src, "tgt": tgt, "thresholds_src": th, "src_oof_f05": th["score"],
+    out = {"src": src, "tgt": tgt, "thresholds_src": th, "src_holdout_f05": th["score"],
            "tgt_f05_b0": round(curve[0.0], 5), "b_star": b_star, "tgt_f05_bstar": round(peak, 5),
            "flat_region": [min(flat), max(flat)], "temp_best_ab": best_ab,
            "temp_best_f05": round(temp[best_ab], 5), "temp_gain_over_offset": round(temp[best_ab] - peak, 5),
