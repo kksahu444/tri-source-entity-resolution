@@ -11,7 +11,7 @@ from .utils import append_run_log, get_logger, load_config, new_run_id, seed_eve
 STAGES = {
     "prep": "src.prep",
     "block": "src.blocking.union",
-    "features": "src.features",
+    "features": "src.featurize",
     "stack": "src.stack",
     "decide": "src.decide",
     "submit": "src.submit",

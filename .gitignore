@@ -36,3 +36,4 @@ student_resource/artifacts/
 student_resource/output/
 student_resource/submissions/*.tsv
 student_resource/runs/*.err
+student_resource/runs/*.log
