@@ -53,8 +53,30 @@ def first_alpha(s: pd.Series, min_len=3) -> pd.Series:
     return s.map(f)
 
 
-def house_key(df: pd.DataFrame) -> pd.Series:
-    st = first_alpha(df["street"])
+def rarest_alpha(s: pd.Series, df_counts: dict, min_len=3) -> pd.Series:
+    """Rarest alphabetic token (by document frequency in the index) of each string: skips generic
+    street-type words ("rue", "road") without a language-specific list."""
+    def f(x):
+        best, bdf = "", None
+        for t in set(x.split()):
+            if len(t) >= min_len and not t[0].isdigit():
+                d = df_counts.get(t, 0)
+                if bdf is None or d < bdf:
+                    best, bdf = t, d
+        return best
+    return s.map(f)
+
+
+def token_df(s: pd.Series) -> dict:
+    from collections import Counter
+    c = Counter()
+    for x in s:
+        c.update(set(x.split()))
+    return c
+
+
+def house_key(df: pd.DataFrame, street_df: dict | None = None) -> pd.Series:
+    st = rarest_alpha(df["street"], street_df) if street_df is not None else first_alpha(df["street"])
     ct = first_alpha(df["city"], 2)
     tail = st.where(st != "", ct)
     return (df["house"] + "|" + tail).where((df["house"] != "") & (tail != ""), "")
@@ -108,7 +130,9 @@ def block_country(cfg, q: pd.DataFrame, r: pd.DataFrame) -> tuple[pd.DataFrame, 
     info["t_c2"] = t()
     log.info("  C2: %s pairs (%.0fs)", f"{len(c2q):,}", t())
     keys = {}
-    for name, fn in (("c5a", house_key), ("c5b", name_city_key)):
+    sdf = token_df(r["street"]) if bc.get("key_rare_token", False) else None
+    hk = lambda d: house_key(d, sdf)
+    for name, fn in (("c5a", hk), ("c5b", name_city_key)):
         kq, kr, skipped = key_channel(fn(q), fn(r), bc["key_block_cap"])
         s = 0.5 * (pair_cos(qn, rn, kq, kr) + pair_cos(qa, ra, kq, kr))
         keys[name] = _topn_per_q(kq, kr, s, bc.get("key_keep", 10))

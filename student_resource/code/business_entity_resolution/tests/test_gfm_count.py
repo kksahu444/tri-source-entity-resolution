@@ -28,6 +28,18 @@ def test_gfm_rule_matches_reference_per_entity():
             assert set(np.flatnonzero(sel[idx])) == set(chosen)
 
 
+def test_fast_matches_reference_rule():
+    rng = np.random.default_rng(7)
+    s1 = np.repeat(np.arange(300), rng.integers(1, 12, 300))
+    p = rng.random(len(s1)) ** rng.choice([0.5, 1, 3], len(s1))
+    cp = rng.dirichlet(np.ones(4), 300)
+    for counts in (None, cp):
+        a, ea = gfm_rule.select(s1, p, counts)
+        b, eb = gfm_rule.select_reference(s1, p, counts)
+        assert (a == b).all()
+        assert all(abs(ea[k] - eb[k]) < 1e-9 for k in eb)
+
+
 def test_likely_singleton_is_empty():
     sel, ef = gfm_rule.select(np.array([0, 0, 0]), np.array([0.05, 0.03, 0.02]), None)
     assert not sel.any() and ef[0] > 0.9
