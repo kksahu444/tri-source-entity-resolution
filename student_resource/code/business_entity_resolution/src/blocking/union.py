@@ -16,6 +16,7 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.parquet as pq
+import scipy.sparse as sp
 
 from .. import io_utils
 from ..cv import build_dev_universe
@@ -88,10 +89,19 @@ def block_country(cfg, q: pd.DataFrame, r: pd.DataFrame) -> tuple[pd.DataFrame, 
     qn, qa = space.transform(q["core"].tolist(), q["addr_core"].tolist())
     rc_t = combined(rn, ra).T.tocsr()
     qc = combined(qn, qa)
+    # candidate generation on the rarer features only (short posting lists), then exact rescoring
+    cap = max(bc.get("rare_df_min", 20000), int(bc.get("rare_df_share", 0.005) * len(r)))
+    col_df = np.diff(rc_t.indptr)
+    rc_t = sp.csr_matrix(sp.diags((col_df <= cap).astype(np.float32)) @ rc_t)
+    rc_t.eliminate_zeros()
     info["t_vectorize"] = t()
-    log.info("  vectorised %s queries, %s records (%.0fs)", f"{len(q):,}", f"{len(r):,}", t())
-    c1q, c1r, c1s = topk(qc, rc_t, bc["k_tfidf"], chunk=bc["query_chunk"])
+    info["rare_df_cap"] = cap
+    log.info("  vectorised %s queries, %s records, rare cap %d (%.0fs)", f"{len(q):,}", f"{len(r):,}", cap, t())
+    gq, gr, _ = topk(qc, rc_t, bc.get("c1_generate", 100), threshold=0.0, chunk=bc["query_chunk"])
     del rc_t, qc
+    gs = 0.5 * (pair_cos(qn, rn, gq, gr) + pair_cos(qa, ra, gq, gr))
+    c1q, c1r, c1s = _topn_per_q(gq, gr, gs, bc["k_tfidf"])
+    del gq, gr, gs
     info["t_c1"] = t()
     log.info("  C1: %s pairs (%.0fs)", f"{len(c1q):,}", t())
     c2q, c2r, c2size = crowd_channel(sorted_key(q["core"]), sorted_key(r["core"]), qa, ra, bc["crowd_cap"])

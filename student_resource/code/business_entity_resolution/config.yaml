@@ -21,7 +21,8 @@ normalize:
 dev:
   city_group_share: 0.30             # share of (country, city) groups in the dev universe
   orphan_share: 0.19                 # D0 block 2: dev S1 dropped from the queries, records kept as distractors
-blocking: {k_tfidf: 30, k_bm25: 30, k_dense: 30, crowd_cap: 10, key_block_cap: 200, query_chunk: 100000}
+blocking: {k_tfidf: 30, k_bm25: 30, k_dense: 30, crowd_cap: 10, key_block_cap: 200, key_keep: 10, query_chunk: 100000,
+           c1_generate: 100, rare_df_min: 20000, rare_df_share: 0.005}   # C1: generate on features in <= cap records, rescore exactly
 prune: {pc_tolerance: 0.005, reverse_keep: 3}
 cross_encoder: {backbone: auto, max_len: auto, band: auto, epochs: 2}
 decision: {rule: two_threshold, max_m: 30}   # later gfm_count or gfm_indep, whichever wins out-of-fold

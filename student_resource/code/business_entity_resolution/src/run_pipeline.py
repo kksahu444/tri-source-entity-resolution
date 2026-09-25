@@ -10,6 +10,7 @@ from .utils import append_run_log, get_logger, load_config, new_run_id, seed_eve
 
 STAGES = {
     "prep": "src.prep",
+    "translit": "src.translit",
     "block": "src.blocking.union",
     "features": "src.featurize",
     "stack": "src.stack",
@@ -17,7 +18,7 @@ STAGES = {
     "loco": "src.france",
     "submit": "src.submit",
 }
-ORDER = ["prep", "block", "features", "stack", "decide", "submit"]
+ORDER = ["prep", "translit", "block", "features", "stack", "decide", "submit"]
 
 
 def main(argv=None) -> int:
