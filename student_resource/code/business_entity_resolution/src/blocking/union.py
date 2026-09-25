@@ -13,6 +13,8 @@ import os
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
+import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
 from .. import io_utils
@@ -23,7 +25,7 @@ from .crowd import crowd_channel, key_channel
 from .tfidf import TfidfSpace, combined, pair_cos, topk
 
 log = get_logger()
-REC_COLS = None  # all columns
+BLOCK_COLS = ["entity_id", "core", "addr_core", "house", "street", "city", "src"]
 
 
 def block_dir(cfg):
@@ -81,17 +83,20 @@ def _topn_per_q(qi, ri, score, n):
 def block_country(cfg, q: pd.DataFrame, r: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     bc, t = cfg["blocking"], Timer()
     info = {}
-    space = TfidfSpace().fit(r["core"].tolist(), r["addr_core"].tolist())
-    rn, ra = space.transform(r["core"].tolist(), r["addr_core"].tolist())
+    space = TfidfSpace()
+    rn, ra = space.fit_transform(r["core"].tolist(), r["addr_core"].tolist())
     qn, qa = space.transform(q["core"].tolist(), q["addr_core"].tolist())
     rc_t = combined(rn, ra).T.tocsr()
     qc = combined(qn, qa)
     info["t_vectorize"] = t()
+    log.info("  vectorised %s queries, %s records (%.0fs)", f"{len(q):,}", f"{len(r):,}", t())
     c1q, c1r, c1s = topk(qc, rc_t, bc["k_tfidf"], chunk=bc["query_chunk"])
     del rc_t, qc
     info["t_c1"] = t()
+    log.info("  C1: %s pairs (%.0fs)", f"{len(c1q):,}", t())
     c2q, c2r, c2size = crowd_channel(sorted_key(q["core"]), sorted_key(r["core"]), qa, ra, bc["crowd_cap"])
     info["t_c2"] = t()
+    log.info("  C2: %s pairs (%.0fs)", f"{len(c2q):,}", t())
     keys = {}
     for name, fn in (("c5a", house_key), ("c5b", name_city_key)):
         kq, kr, skipped = key_channel(fn(q), fn(r), bc["key_block_cap"])
@@ -155,24 +160,40 @@ def completeness(pairs: pd.DataFrame, q: pd.DataFrame, r: pd.DataFrame, gt: pd.D
     return out
 
 
-def run(cfg: dict, split: str = "dev") -> dict:
+def run(cfg: dict, split: str = "dev", frac: float | None = None) -> dict:
+    """frac: benchmark mode; only that share of the queries is blocked and nothing is saved."""
     t = Timer()
     d = block_dir(cfg)
     src_split = "train" if split == "dev" else "test"
-    s1 = read_norm(cfg, src_split, 1)
+    s1_tbl = pq.read_table(norm_path(cfg, src_split, 1))
+    n_full = {}
     if split == "dev":
         dev = build_dev_universe(cfg)
-        s1 = s1[s1["entity_id"].isin(dev.loc[dev["role"] == "query", "entity_id"])]
+        ids = pa.array(dev.loc[dev["role"] == "query", "entity_id"].tolist())
+        s1_tbl = s1_tbl.filter(pc.is_in(s1_tbl["entity_id"], value_set=ids))
         gt = io_utils.load_ground_truth(cfg["paths"]["dataset"])
-    res = {"stage": "block", "notes": ""}
+    if frac:
+        n_full = pd.Series(s1_tbl["country"].to_pylist()).value_counts().to_dict()
+        rng = np.random.default_rng(cfg["seed"])
+        s1_tbl = s1_tbl.filter(pa.array(rng.random(s1_tbl.num_rows) < frac))
+    res = {"stage": "block_bench" if frac else "block", "notes": ""}
     stats = {}
-    for country in sorted(s1["country"].unique()):
-        q = s1[s1["country"] == country].reset_index(drop=True)
-        r = pd.concat([read_norm(cfg, src_split, k, country) for k in (2, 3)], ignore_index=True)
+    for country in sorted(set(s1_tbl["country"].to_pylist())):
+        q_tbl = s1_tbl.filter(pc.equal(s1_tbl["country"], country))
+        q = q_tbl.select(BLOCK_COLS).to_pandas()
+        tbl_r = pa.concat_tables([pq.read_table(norm_path(cfg, src_split, k), filters=[("country", "=", country)])
+                                  for k in (2, 3)])
+        r = tbl_r.select(BLOCK_COLS).to_pandas()
+        log.info("block %s %s: loaded %s queries, %s records (%.0fs)", split, country, f"{len(q):,}", f"{len(r):,}", t())
         pairs, info = block_country(cfg, q, r)
-        q.to_parquet(os.path.join(d, f"{split}_{country}_q.parquet"), index=False)
-        r.to_parquet(os.path.join(d, f"{split}_{country}_r.parquet"), index=False)
-        pairs.to_parquet(os.path.join(d, f"{split}_{country}_pairs.parquet"), index=False)
+        if frac:
+            per_q = (info["t_c1"] - info["t_vectorize"] + info["t_union"] - info["t_c5"]) / max(len(q), 1)
+            info["projected_full_s"] = round(info["t_union"] + per_q * (n_full[country] - len(q)), 0)
+        else:
+            pq.write_table(q_tbl, os.path.join(d, f"{split}_{country}_q.parquet"))
+            pq.write_table(tbl_r, os.path.join(d, f"{split}_{country}_r.parquet"))
+            pairs.to_parquet(os.path.join(d, f"{split}_{country}_pairs.parquet"), index=False)
+        del tbl_r
         if split == "dev":
             info.update(completeness(pairs, q, r, gt))
             res[f"PC_union_{country}"] = info["PC_union"]
@@ -180,9 +201,10 @@ def run(cfg: dict, split: str = "dev") -> dict:
         info.update({"n_q": len(q), "n_r": len(r)})
         stats[country] = info
         log.info("block %s %s: %s", split, country, json.dumps(info))
-        del q, r, pairs
+        del q, r, pairs, q_tbl
     res["cands_per_s1"] = round(sum(s["pairs"] for s in stats.values()) / sum(s["n_q"] for s in stats.values()), 2)
     res["runtime_s"] = t()
     res["notes"] = json.dumps(stats)
-    json.dump(stats, open(os.path.join(cfg["paths"]["runs"], f"block_{split}.json"), "w"), indent=1)
+    name = f"block_{split}{'_bench' if frac else ''}.json"
+    json.dump(stats, open(os.path.join(cfg["paths"]["runs"], name), "w"), indent=1)
     return res

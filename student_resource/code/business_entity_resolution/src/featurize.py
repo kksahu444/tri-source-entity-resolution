@@ -28,12 +28,26 @@ def countries(cfg, split):
     return sorted(os.path.basename(p).split("_")[1] for p in glob.glob(os.path.join(block_dir(cfg), f"{split}_*_pairs.parquet")))
 
 
+FEAT_COLS = ["entity_id", "core", "name_b", "legal", "alt", "addr_b", "addr_core", "house", "house_sfx", "street",
+             "city", "region", "unit", "landmark", "nums", "n_parts", "f_tag", "f_lead", "f_bang", "f_digits",
+             "f_nonlatin", "src"]
+
+
 def load_block(cfg, split, country):
+    """Arrow-backed strings: only the values of candidate pairs are materialised as Python objects."""
     d = block_dir(cfg)
-    q = pd.read_parquet(os.path.join(d, f"{split}_{country}_q.parquet"))
-    r = pd.read_parquet(os.path.join(d, f"{split}_{country}_r.parquet"))
+    q = pd.read_parquet(os.path.join(d, f"{split}_{country}_q.parquet"), columns=FEAT_COLS)
+    r = pd.read_parquet(os.path.join(d, f"{split}_{country}_r.parquet"), columns=FEAT_COLS, dtype_backend="pyarrow")
     pairs = pd.read_parquet(os.path.join(d, f"{split}_{country}_pairs.parquet"))
     return q, r, pairs
+
+
+def leak_share(q, r, pairs, gt, dev, fold_of_pair) -> float:
+    """Section 8 leak check: share of pairs whose record's true S1 is a query in another fold."""
+    owner = gt.set_index("cand_id")["s1_id"]
+    rec_owner = owner.reindex(np.asarray(r["entity_id"].to_numpy(), dtype=object)[pairs["ri"].to_numpy()])
+    q_fold = dev["fold"].reindex(rec_owner.to_numpy()).to_numpy()
+    return float(np.mean((q_fold >= 0) & (q_fold != fold_of_pair)))
 
 
 def labels(q, r, pairs, gt):
@@ -63,6 +77,7 @@ def run(cfg: dict, split: str = "dev") -> dict:
             ys[c], n_true[c] = labels(q, r, pairs, gt)
             folds[c] = dev["fold"].reindex(q["entity_id"]).to_numpy()[pairs["qi"].to_numpy()]
             qis[c] = pairs["qi"].to_numpy()
+            info[c] = {"leak_share": round(leak_share(q, r, pairs, gt, dev, folds[c]), 5)}
             log.info("cheap features %s: %s pairs (%.0fs)", c, f"{len(pairs):,}", t())
         cs = list(cheap)
         X = pd.concat([cheap[c] for c in cs], ignore_index=True)
@@ -78,7 +93,7 @@ def run(cfg: dict, split: str = "dev") -> dict:
             off += m
             n, pcu, curve = prune.choose_n(qis[c], s, ys[c], n_true[c], pc["pc_tolerance"])
             ns[c] = n
-            info[c] = {"N": n, "PC_union": round(pcu, 5), "PC_at_N": curve}
+            info[c].update({"N": n, "PC_union": round(pcu, 5), "PC_at_N": curve})
             cheap[c]["prune_score"] = s
         ns["France"] = max(ns.values())
         pickle.dump({"models": models, "cols": cols, "N": ns}, open(model_path, "wb"))

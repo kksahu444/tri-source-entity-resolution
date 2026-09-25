@@ -53,6 +53,17 @@ def test_topk_exact_and_pair_cos():
     assert np.allclose(pair_cos(q, r, qi, ri), s, atol=1e-5)
 
 
+def test_hash_tfidf_matches_sklearn():
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from src.blocking.tfidf import HashTfidf
+    docs = ["garza empire", "garza emprie", "bethel grade", "classic safe minerals", "classic safe",
+            "modern construction", "modern constrcucon", "garza empire", "bethel grade"] * 3
+    h = HashTfidf("char", min_df=2, max_df=0.9, n_jobs=1)
+    xh = h.fit_transform(docs)
+    xs = TfidfVectorizer(analyzer="char_wb", ngram_range=(3, 3), sublinear_tf=True, min_df=2, max_df=0.9).fit_transform(docs)
+    assert np.allclose((xh @ xh.T).toarray(), (xs @ xs.T).toarray(), atol=1e-5)
+
+
 def test_crowd_and_key_channels():
     qk = pd.Series(["a b", "c", ""])
     rk = pd.Series(["a b"] * 3 + ["c"] * 12 + [""])
