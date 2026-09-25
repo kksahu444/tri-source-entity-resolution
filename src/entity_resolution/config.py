@@ -15,13 +15,21 @@ from pathlib import Path
 class BlockingConfig:
     """Candidate generation. All ``*_k`` values are neighbours per Source-1 record per target source."""
 
-    name_char_k: int = 15  # char 2-4gram TF-IDF on the legal-suffix-free name
-    name_word_k: int = 10  # word + phonetic-skeleton TF-IDF on the name (transliterations)
     full_char_k: int = 15  # char 3-4gram TF-IDF on name + address
-    addr_word_k: int = 8  # word 1-2gram TF-IDF on address (same address, different trade name)
+    name_word_k: int = 0  # word + phonetic-skeleton TF-IDF on the name only (off: names repeat in crowds)
+    crowd_k: int = 10  # same compact core name, ranked by address cosine
+    max_crowd: int = 2000  # name crowds with more targets than this are left to full_char
+    addr_word_k: int = 5  # word 1-2gram TF-IDF on address (same address, different trade name)
+    name_char_k: int = 0  # char 2-4gram TF-IDF on the legal-free name (off: full_char covers it)
     min_sim: float = 0.05  # neighbours below this cosine are discarded
-    max_key_block: int = 30  # exact-key blocks larger than this are treated as stop-keys
-    max_candidates: int = 0  # optional cap per Source-1 record after the union (0 = no cap)
+    char_max_df: float = 0.05  # char n-grams in more than this share of a partition are dropped
+    max_key_block: int = 30  # exact-key blocks with more target records than this are stop-keys
+    # rule-based ranking of the union: weighted sum of TF-IDF cosines, then a hard cut per S1 record
+    # and target source (0 = no cut). This cut decides what candidate_pairs.tsv contains.
+    score_weights: dict = field(default_factory=lambda: {"full_char": 1.0, "addr_word": 0.5})
+    max_per_source: int = 10
+    reverse_k: int = 3  # also keep each target's best S1s (competitors for the assignment step)
+    train_s1_sample: float = 1.0  # share of train S1 records kept (all S2/S3 kept); 1.0 = everything
     use_embeddings: bool = False  # dense blocker + feature (needs requirements-embeddings.txt)
     embed_model: str = "intfloat/multilingual-e5-small"  # MIT licence, ~118M params
     embed_k: int = 15

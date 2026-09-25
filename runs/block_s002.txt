@@ -1,0 +1,3 @@
+00:35:00 entity_resolution.io train: 12,527,040 records (S1=2206821, S2=5034616, S3=5285603), labels=True
+00:35:00 entity_resolution.pipeline [train] load done in 52.6s
+00:35:02 entity_resolution.pipeline sampled 43,948 of 2,206,821 S1 records

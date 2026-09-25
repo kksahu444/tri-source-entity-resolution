@@ -36,7 +36,8 @@ def fetch(dest: str | Path = "dataset", repo: str = REPO, tag: str = RELEASE_TAG
     dest = Path(dest)
     download_dir = dest / "_download"
     download_dir.mkdir(parents=True, exist_ok=True)
-    cmd = ["gh", "release", "download", tag, "-R", repo, "-D", str(download_dir), "--clobber"]
+    cmd = ["gh", "release", "download", tag, "-R", repo, "-D", str(download_dir), "--clobber",
+           "-p", "*.tsv.gz", "-p", CHECKSUMS]  # skip the 1.1 GB organiser zip
     try:
         subprocess.run(cmd, check=True)
     except FileNotFoundError as exc:

@@ -50,10 +50,73 @@ def _join_single_letters(tokens: list[str]) -> list[str]:
     return out
 
 
+# Indic scripts (Devanagari, Bengali, Gurmukhi, Gujarati, Oriya, Tamil, Telugu, Kannada, Malayalam)
+# share one layout: the same letter sits at the same offset inside each 128-code-point block, so
+# one offset table transliterates all nine. Romanisation follows common Indian-English spelling
+# ("ch", "sh", short vowels) because that is how the Latin-script sources write the same names.
+_INDIC_START, _INDIC_END = 0x0900, 0x0D7F
+_INDIC_CONSONANTS = {
+    0x15: "k", 0x16: "kh", 0x17: "g", 0x18: "gh", 0x19: "n", 0x1A: "ch", 0x1B: "chh", 0x1C: "j", 0x1D: "jh",
+    0x1E: "n", 0x1F: "t", 0x20: "th", 0x21: "d", 0x22: "dh", 0x23: "n", 0x24: "t", 0x25: "th", 0x26: "d",
+    0x27: "dh", 0x28: "n", 0x29: "n", 0x2A: "p", 0x2B: "ph", 0x2C: "b", 0x2D: "bh", 0x2E: "m", 0x2F: "y",
+    0x30: "r", 0x31: "r", 0x32: "l", 0x33: "l", 0x34: "l", 0x35: "v", 0x36: "sh", 0x37: "sh", 0x38: "s",
+    0x39: "h", 0x58: "k", 0x59: "kh", 0x5A: "g", 0x5B: "z", 0x5C: "d", 0x5D: "rh", 0x5E: "f", 0x5F: "y",
+}
+_INDIC_VOWELS = {  # independent vowel letters
+    0x05: "a", 0x06: "a", 0x07: "i", 0x08: "i", 0x09: "u", 0x0A: "u", 0x0B: "ri", 0x0C: "li", 0x0D: "e",
+    0x0E: "e", 0x0F: "e", 0x10: "ai", 0x11: "o", 0x12: "o", 0x13: "o", 0x14: "au", 0x60: "ri", 0x61: "li",
+}
+_INDIC_SIGNS = {  # dependent vowel signs, replacing a consonant's inherent "a"
+    0x3E: "a", 0x3F: "i", 0x40: "i", 0x41: "u", 0x42: "u", 0x43: "ri", 0x44: "ri", 0x45: "e", 0x46: "e",
+    0x47: "e", 0x48: "ai", 0x49: "o", 0x4A: "o", 0x4B: "o", 0x4C: "au", 0x62: "li", 0x63: "li",
+}
+_INDIC_OTHER = {0x01: "n", 0x02: "n", 0x03: "h", 0x50: "om", 0x70: "n"} | {0x66 + d: str(d) for d in range(10)}
+_VIRAMA = 0x4D
+_HAS_INDIC = re.compile(r"[\u0900-\u0d7f]")
+
+
+def transliterate_indic(text: str) -> str:
+    """Romanise Indic-script text: ``राम मार्केटिंग प्राइवेट लिमिटेड`` -> ``ram marketing praivet limited``.
+
+    A consonant carries an inherent "a" unless a vowel sign or virama follows; the inherent "a" is
+    dropped at the end of a word, as Hindi pronunciation (and Latin spelling) does.
+    """
+    out: list[str] = []
+    pending_a = False
+    for ch in text:
+        cp = ord(ch)
+        if _INDIC_START <= cp <= _INDIC_END:
+            off = cp & 0x7F
+            if off in _INDIC_SIGNS:
+                out.append(_INDIC_SIGNS[off])
+                pending_a = False
+                continue
+            if off == _VIRAMA:
+                pending_a = False
+                continue
+            if off in (0x3C, 0x3D, 0x71) or 0x51 <= off <= 0x57:  # nukta, avagraha, addak, accents
+                continue
+            if pending_a:
+                out.append("a")
+            if off in _INDIC_CONSONANTS:
+                out.append(_INDIC_CONSONANTS[off])
+                pending_a = True
+            else:
+                out.append(_INDIC_VOWELS.get(off) or _INDIC_OTHER.get(off, ""))
+                pending_a = False
+            continue
+        pending_a = False  # word end: the inherent vowel is silent
+        out.append(ch)
+    return "".join(out)
+
+
 def clean_text(text: object) -> str:
-    """ASCII-fold, lower-case, ``&`` -> ``and``, drop apostrophes, punctuation -> space."""
+    """Romanise Indic scripts, ASCII-fold, lower-case, ``&`` -> ``and``, drop apostrophes,
+    punctuation -> space."""
     if not isinstance(text, str) or not text:
         return ""
+    if not text.isascii() and _HAS_INDIC.search(text):
+        text = transliterate_indic(text)
     t = strip_accents(text)
     t = t.replace("&", " and ").replace("@", " at ").replace("'", "")
     t = _NON_WORD.sub(" ", t)
@@ -97,7 +160,7 @@ NAME_CANON = {
     "corporation": "corp", "corpn": "corp", "corporations": "corp",
     "company": "co", "companies": "co", "cos": "co", "compnay": "co",
     "limited": "ltd", "ltda": "ltd", "lmtd": "ltd", "ltd": "ltd",
-    "private": "pvt", "pvte": "pvt", "prv": "pvt", "pte": "pvt", "priv": "pvt",
+    "private": "pvt", "praivet": "pvt", "privet": "pvt", "pvte": "pvt", "prv": "pvt", "pte": "pvt", "priv": "pvt",
     "public": "pub",
     "et": "and", "und": "and",
     # frequent business words
@@ -139,6 +202,7 @@ _STRONG_LEGAL = frozenset("inc corp ltd llc llp plc pvt opc pllc lllp gmbh sarl 
 _NAME_STOP = frozenset("the a an of and le la les l de du des d ms".split())
 _DBA_MARKERS = frozenset("dba aka fka ta".split())
 _NAME_PHRASE_RE = _phrase_regex(NAME_PHRASES)
+_DOMAIN = re.compile(r"\b(?:www\.)?([a-z0-9][a-z0-9-]*)\.(?:co\.in|com|net|org|in|co|biz|info|fr|us|io)\b", re.I)
 
 
 @lru_cache(maxsize=500_000)
@@ -184,6 +248,8 @@ def _split_dba(tokens: list[str]) -> list[list[str]]:
 
 def normalize_name(raw: object) -> dict:
     """Normalise a business name into the representations used by blocking and features."""
+    if isinstance(raw, str) and "." in raw:
+        raw = _DOMAIN.sub(r"\1", raw)
     text = _replace_phrases(clean_text(raw), _NAME_PHRASE_RE, NAME_PHRASES)
     tokens = [NAME_CANON.get(t, t) for t in text.split()]
     core = _core_tokens(tokens)
@@ -283,6 +349,48 @@ _SPACED_PIN = re.compile(r"\b(\d{3})\s(\d{3})\b")
 _POSTCODE = re.compile(r"\b\d{5,6}\b")
 _LEADING_DIGITS = re.compile(r"^(\d+)")
 _SEGMENT_SPLIT = re.compile(r"[,;\n|]")
+# street types, unit words and directions: never the identifying word of a street name
+_ADDR_GENERIC = frozenset(
+    "st rd ave blvd dr ln ct pl sq hwy pkwy expy ter cir xing crs ext rue chem imp allee rte fbg quai res bat "
+    "no plot h unit ste apt bldg fl rm shop sec ph n s e w ne nw se sw".split()
+)
+
+
+# region codes after ADDR_CANON / ADDR_PHRASES (US states + DC, Indian states / UTs) and filler
+# segments: a segment made only of these is never the city
+_REGIONS = frozenset(
+    "al ak az ar ca co ct de dc fl ga hi id il in ia ks ky la me md ma mi mn ms mo mt ne nv nh nj nm ny nc nd "
+    "oh ok or pa ri sc sd tn tx ut vt va wa wv wi wy "
+    "mh ka tg gj rj kl pb hr br od as jh cg uk goa ap hp mp up wb jk ga ml mn mz nl sk tr py ch "
+    "n a na nil none".split()
+)
+_CITY_FILLER = frozenset("city of the town twp village vill dist district borough boro township cdp".split())
+
+
+def _city(segments: list[list[str]]) -> str:
+    """Last segment that looks like a place name: no digits, not a region code, not a street line.
+
+    ``500 Market St, San Jose, CA`` -> ``san jose``; ``SC, York, 191 Bezelle Ave`` -> ``york``;
+    ``..., City of El Paso`` and ``Ticonderoga Townshiip`` lose the administrative words.
+    """
+    for toks in reversed(segments):
+        words = [t for t in toks if t not in _CITY_FILLER and not t.startswith(("townsh", "towsh"))
+                 and not _POSTCODE.fullmatch(t)]
+        if not words or any(ch.isdigit() for t in words for ch in t) or all(t in _REGIONS for t in words):
+            continue
+        if words[-1] in _ADDR_GENERIC and len(words) > 1:  # "mg rd", "oak ave"; "st paul" is a city
+            continue
+        return " ".join(words)
+    return ""
+
+
+def _house_street(core: list[str]) -> str:
+    """First house number plus the next identifying word: ``500 market st san jose`` -> ``500 market``."""
+    for i, tok in enumerate(core):
+        if m := _LEADING_DIGITS.match(tok):
+            word = next((t for t in core[i + 1:] if t.isalpha() and t not in _ADDR_GENERIC), "")
+            return f"{m.group(1)} {word}" if word else ""
+    return ""
 
 
 def normalize_address(raw: object, country: object = "") -> dict:
@@ -298,6 +406,7 @@ def normalize_address(raw: object, country: object = "") -> dict:
 
     core: list[str] = []
     landmark: list[str] = []
+    segments: list[list[str]] = []
     for segment in _SEGMENT_SPLIT.split(raw):
         seg = clean_text(segment)
         if not seg or seg == country_clean:
@@ -310,6 +419,7 @@ def normalize_address(raw: object, country: object = "") -> dict:
             landmark.extend(toks[cut + 1:])
             toks = toks[:cut]
         core.extend(toks)
+        segments.append(toks)
 
     pc_set = set(postcodes)
     if core and country_clean and core[-1] == country_clean:
@@ -322,6 +432,8 @@ def normalize_address(raw: object, country: object = "") -> dict:
         "addr_landmark": " ".join(landmark),
         "addr_postcodes": " ".join(postcodes),
         "addr_numbers": " ".join(numbers),
+        "addr_street": _house_street(core),
+        "addr_city": _city(segments),
         "has_landmark": int(bool(landmark)),
     }
 

@@ -12,14 +12,14 @@ import numpy as np
 import pandas as pd
 
 from . import __version__
-from .blocking import TextIndex, build_text_index, generate_candidates
+from .blocking import build_text_index, generate_candidates
 from .config import Config
 from .decide import select_matches, to_mapping, tune_decision
 from .features import build_features, feature_columns
 from .io import CANDIDATE_COLUMN, MATCH_COLUMN, SplitData, load_split, write_id_lists
 from .metrics import blocking_report, f_beta_from_counts, macro_f_from_selection
 from .model import add_stage2_features, cross_validate, feature_importance, predict_average
-from .normalize import normalize_records
+from .normalize import normalize_country, normalize_records
 from .validate import validate_outputs
 
 log = logging.getLogger(__name__)
@@ -31,8 +31,7 @@ class Prepared:
     """Everything derived from one split before modelling."""
 
     data: SplitData
-    recs: pd.DataFrame
-    index: TextIndex
+    recs: pd.DataFrame  # entity_id, source, country (normalised) of every record
     cands: pd.DataFrame
     feats: pd.DataFrame
 
@@ -49,20 +48,48 @@ class _Timer:
         log.info("%s done in %.1fs", self.what, time.perf_counter() - self.t0)
 
 
+def _sample_s1(data: SplitData, share: float, seed: int) -> SplitData:
+    """Keep a random ``share`` of the Source-1 records (and their labels); every S2/S3 record stays,
+    so the candidate pool per S1 record is as large as in the full run."""
+    s1 = np.asarray(data.s1_ids)
+    keep = s1[np.random.default_rng(seed).random(len(s1)) < share]
+    kept = set(keep)
+    recs = data.records
+    recs = recs[(recs["source"] != 1) | recs["entity_id"].isin(kept)].reset_index(drop=True)
+    gt = {k: v for k, v in data.ground_truth.items() if k in kept} if data.ground_truth is not None else None
+    log.info("sampled %s of %s S1 records", f"{len(keep):,}", f"{len(s1):,}")
+    return SplitData(records=recs, s1_ids=keep.tolist(), ground_truth=gt)
+
+
 def prepare(cfg: Config, split: str, with_features: bool = True) -> Prepared:
-    """Load, normalise, block and (optionally) featurise one split."""
-    with _Timer(f"[{split}] load + normalise"):
+    """Load one split, then normalise, block and (optionally) featurise it country by country.
+
+    There are no cross-country matches, so each country is an independent problem with its own
+    TF-IDF vocabulary; only one country's matrices are in memory at a time. Countries are taken
+    from the data (open set), and a country with no Source-1 record is skipped.
+    """
+    with _Timer(f"[{split}] load"):
         data = load_split(cfg.data_dir, split)
-        recs = normalize_records(data.records)
-    with _Timer(f"[{split}] text index"):
-        index = build_text_index(recs, cfg.blocking)
-    with _Timer(f"[{split}] blocking"):
-        cands = generate_candidates(recs, index, cfg.blocking)
-    feats = pd.DataFrame()
-    if with_features:
-        with _Timer(f"[{split}] features"):
-            feats = build_features(recs, cands, index)
-    return Prepared(data, recs, index, cands, feats)
+    if split == "train" and cfg.blocking.train_s1_sample < 1.0:
+        data = _sample_s1(data, cfg.blocking.train_s1_sample, cfg.model.seed)
+    raw = data.records["country"]
+    country = raw.map({c: normalize_country(c) for c in raw.unique()})
+    cand_parts, feat_parts = [], []
+    for c in sorted(country[data.records["source"] == 1].unique()):
+        part = data.records[(country == c).to_numpy()]
+        with _Timer(f"[{split}/{c or '-'}] {len(part):,} records"):
+            recs = normalize_records(part)
+            index = build_text_index(recs, cfg.blocking, for_features=with_features)
+            cands = generate_candidates(recs, index, cfg.blocking)
+            if not cands.empty:
+                cand_parts.append(cands)
+                if with_features:
+                    feat_parts.append(build_features(recs, cands, index))
+        del recs, index
+    cands = pd.concat(cand_parts, ignore_index=True) if cand_parts else pd.DataFrame(columns=["s1_id", "cand_id"])
+    feats = pd.concat(feat_parts, ignore_index=True) if feat_parts else pd.DataFrame()
+    recs = data.records[["entity_id", "source"]].assign(country=country.to_numpy())
+    return Prepared(data, recs, cands, feats)
 
 
 def _n_true(data: SplitData) -> pd.Series:
@@ -77,12 +104,27 @@ def _label(feats: pd.DataFrame, gt: dict[str, list[str]]) -> np.ndarray:
 
 
 def block_report(cfg: Config, split: str = "train") -> dict:
-    """Blocking-only run: recall ceiling / reduction ratio on a labelled split."""
+    """Blocking-only run: recall ceiling, recall at tighter cuts and per channel, overall and per
+    country, on a labelled split. On an unlabelled split only the candidate-set size is reported."""
     prep = prepare(cfg, split, with_features=False)
+    recs, cands = prep.recs, prep.cands
+    per_s1 = cands.groupby("s1_id").size().reindex(prep.data.s1_ids, fill_value=0)
     if prep.data.ground_truth is None:
-        raise ValueError(f"{split} has no ground truth; blocking recall needs labels")
-    src = prep.recs["source"]
-    report = blocking_report(prep.cands, prep.data.ground_truth, int((src == 1).sum()), int((src != 1).sum()))
+        report = {"n_candidate_pairs": int(len(cands)), "mean_candidates_per_s1": float(per_s1.mean()),
+                  "max_candidates_per_s1": int(per_s1.max()), "s1_without_candidates": int((per_s1 == 0).sum())}
+        log.info("blocking report: %s", json.dumps(report, indent=2))
+        return report
+    gt = prep.data.ground_truth
+    src = recs["source"]
+    report = blocking_report(cands, gt, int((src == 1).sum()), int((src != 1).sum()))
+    s1_country = recs.loc[src == 1].set_index("entity_id")["country"]
+    report["by_country"] = {}
+    for country, ids in s1_country.groupby(s1_country).groups.items():
+        ids = set(ids)
+        n_tgt = int(((recs["country"] == country) & (src != 1)).sum())
+        sub = blocking_report(cands[cands["s1_id"].isin(ids)], {k: v for k, v in gt.items() if k in ids},
+                              len(ids), n_tgt)
+        report["by_country"][str(country)] = {k: v for k, v in sub.items() if k != "channels"}
     log.info("blocking report: %s", json.dumps(report, indent=2))
     return report
 

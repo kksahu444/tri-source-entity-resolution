@@ -5,7 +5,6 @@ Everything is read as strings (IDs like ``S1-000123`` must never become numbers 
 """
 from __future__ import annotations
 
-import csv
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -37,21 +36,14 @@ def _count_data_lines(path: Path) -> int:
 def read_tsv(path: str | Path) -> pd.DataFrame:
     """Read a challenge TSV as all-string columns.
 
-    A stray double quote inside an address makes the default CSV quoting swallow following
-    lines; if the parsed row count disagrees with the physical line count we re-read with
-    quoting disabled.
+    Fields containing quotes are CSV-escaped (``"...""Niagara"" Building..."``), so the default
+    quoting is the correct parse; ``QUOTE_NONE`` would keep the escape quotes in the text.
     """
     path = Path(path)
-    opts = dict(sep="\t", dtype=str, keep_default_na=False, na_filter=False, encoding="utf-8-sig")
-    df = pd.read_csv(path, **opts)
+    df = pd.read_csv(path, sep="\t", dtype=str, keep_default_na=False, na_filter=False, encoding="utf-8-sig")
     n_lines = _count_data_lines(path)
     if len(df) != n_lines:
-        alt = pd.read_csv(path, quoting=csv.QUOTE_NONE, **opts)
-        if len(alt) == n_lines:
-            log.warning("%s: quote characters broke default parsing; re-read with QUOTE_NONE", path.name)
-            df = alt
-        else:
-            log.warning("%s: parsed %d rows but file has %d data lines", path.name, len(df), n_lines)
+        log.warning("%s: parsed %d rows but file has %d data lines", path.name, len(df), n_lines)
     df.columns = [c.strip() for c in df.columns]
     for col in df.columns:
         df[col] = df[col].astype(str).str.strip()
