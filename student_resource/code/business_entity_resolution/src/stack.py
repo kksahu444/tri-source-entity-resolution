@@ -14,10 +14,10 @@ from .utils import Timer, get_logger
 
 log = get_logger()
 META = ["qi", "ri", "y", "fold"]
-PARAMS = {"objective": "binary", "learning_rate": 0.08, "num_leaves": 127, "min_data_in_leaf": 100,
-          "feature_fraction": 0.8, "bagging_fraction": 0.8, "bagging_freq": 1, "lambda_l2": 1.0,
-          "max_bin": 127, "verbose": -1, "num_threads": 0}
-MAX_ROUNDS, EARLY = 2000, 50
+PARAMS = {"objective": "binary", "learning_rate": 0.1, "num_leaves": 127, "min_data_in_leaf": 200,
+          "feature_fraction": 0.7, "bagging_fraction": 0.7, "bagging_freq": 1, "lambda_l2": 1.0,
+          "max_bin": 63, "verbose": -1, "num_threads": 0}
+MAX_ROUNDS, EARLY = 1500, 30
 
 
 def pred_dir(cfg):

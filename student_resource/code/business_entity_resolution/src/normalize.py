@@ -209,5 +209,6 @@ def make_pool(cfg: dict, vocab: dict | None = None) -> Pool:
                 initargs=(vocab or {"legal": {}, "regions": {}}, translit))
 
 
-def norm_path(cfg: dict, split: str, k: int) -> str:
-    return os.path.join(cfg["paths"]["artifacts"], "norm", f"{split}_s{k}.parquet")
+def norm_path(cfg: dict, split: str, k: int, norm_dir: str | None = None) -> str:
+    d = norm_dir or cfg["normalize"].get("norm_dir", "norm")
+    return os.path.join(cfg["paths"]["artifacts"], d, f"{split}_s{k}.parquet")

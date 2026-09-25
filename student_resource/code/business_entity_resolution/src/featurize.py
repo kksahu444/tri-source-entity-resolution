@@ -113,7 +113,7 @@ def run(cfg: dict, split: str = "dev") -> dict:
         keep = prune.keep_mask(pairs["qi"].to_numpy(), pairs["ri"].to_numpy(), ch["prune_score"].to_numpy(),
                                n, pc["reverse_keep"])
         pairs, ch = pairs[keep].reset_index(drop=True), ch[keep].reset_index(drop=True)
-        f = full_features(q, r, pairs, ch)
+        f = full_features(q, r, pairs, ch, support=cfg.get("features", {}).get("support", False))
         f.insert(0, "qi", pairs["qi"].to_numpy())
         f.insert(1, "ri", pairs["ri"].to_numpy())
         if split == "dev":

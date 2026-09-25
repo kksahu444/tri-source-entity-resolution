@@ -56,6 +56,13 @@ def run(cfg: dict, split: str = "test") -> dict:
     base = os.path.join(sub_dir, f"sub_{day}_{n}_{run_id}")
     shutil.copy(match_path, base + "_matching.tsv")
     shutil.copy(cand_path, base + "_candidates.tsv")
+    arch = os.path.join(cfg["paths"]["artifacts"], "archive", run_id)
+    os.makedirs(arch, exist_ok=True)
+    for src in (os.path.join(feat_dir(cfg), "pruner.pkl"), os.path.join(feat_dir(cfg), "stageA.pkl"),
+                os.path.join(cfg["paths"]["artifacts"], "decision.pkl")):
+        if os.path.exists(src):
+            shutil.copy(src, arch)
+    shutil.copy(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.yaml"), arch)
     man = os.path.join(sub_dir, "manifest.csv")
     new = not os.path.exists(man)
     with open(man, "a", newline="", encoding="utf-8") as fh:

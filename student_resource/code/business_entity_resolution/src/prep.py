@@ -78,7 +78,7 @@ def run(cfg: dict) -> dict:
     with make_pool(cfg, vocab) as pool:
         for split in ("test", "train"):
             for k in (1, 2, 3):
-                out = norm_path(cfg, split, k)
+                out = norm_path(cfg, split, k, "norm")
                 if os.path.exists(out):
                     continue
                 df = io_utils.load_source(root, split, k)

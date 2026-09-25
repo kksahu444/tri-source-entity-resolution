@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 from collections import Counter, defaultdict
 
 import numpy as np
@@ -26,11 +27,14 @@ from .utils import Timer, get_logger
 log = get_logger()
 
 
+SRC, DST = "norm", "norm_tl"
+
+
 def mine(cfg: dict, min_count: int = 3, min_share: float = 0.5) -> dict:
-    s1 = pq.read_table(norm_path(cfg, "train", 1), columns=["entity_id", "name_b"]).to_pandas().set_index("entity_id")["name_b"]
+    s1 = pq.read_table(norm_path(cfg, "train", 1, SRC), columns=["entity_id", "name_b"]).to_pandas().set_index("entity_id")["name_b"]
     recs = []
     for k in (2, 3):
-        t = pq.read_table(norm_path(cfg, "train", k), columns=["entity_id", "name_b", "f_nonlatin"])
+        t = pq.read_table(norm_path(cfg, "train", k, SRC), columns=["entity_id", "name_b", "f_nonlatin"])
         t = t.filter(pc.equal(t["f_nonlatin"], 1))
         recs.append(t.select(["entity_id", "name_b"]).to_pandas())
     recs = pd.concat(recs).set_index("entity_id")["name_b"]
@@ -57,10 +61,12 @@ def mine(cfg: dict, min_count: int = 3, min_share: float = 0.5) -> dict:
 def apply(cfg: dict, mapping: dict, vocab: dict) -> dict:
     legal = {c: frozenset(v) for c, v in vocab["legal"].items()}
     stats = {}
+    os.makedirs(os.path.dirname(norm_path(cfg, "train", 1, DST)), exist_ok=True)
     for split in ("train", "test"):
+        shutil.copy(norm_path(cfg, split, 1, SRC), norm_path(cfg, split, 1, DST))
         for k in (2, 3):
-            path = norm_path(cfg, split, k)
-            tbl = pq.read_table(path)
+            path = norm_path(cfg, split, k, DST)
+            tbl = pq.read_table(norm_path(cfg, split, k, SRC))
             df = tbl.select(["name_b", "alt", "country", "f_nonlatin"]).to_pandas()
             idx = np.flatnonzero(df["f_nonlatin"].to_numpy() == 1)
             name_b, core, leg, alt = (tbl[c].to_pylist() for c in ("name_b", "core", "legal", "alt"))
@@ -87,7 +93,7 @@ def apply(cfg: dict, mapping: dict, vocab: dict) -> dict:
 def run(cfg: dict, split: str | None = None) -> dict:
     t = Timer()
     art = cfg["paths"]["artifacts"]
-    done = os.path.join(art, "translit_applied.json")
+    done = os.path.join(art, DST, "translit_applied.json")
     if os.path.exists(done):
         return {"stage": "translit", "notes": "already applied"}
     mapping = mine(cfg)

@@ -196,7 +196,8 @@ def _string_chunk(q, r, qi, ri, pool) -> dict:
     return out
 
 
-def full_features(q: pd.DataFrame, r: pd.DataFrame, pairs: pd.DataFrame, cheap: pd.DataFrame) -> pd.DataFrame:
+def full_features(q: pd.DataFrame, r: pd.DataFrame, pairs: pd.DataFrame, cheap: pd.DataFrame,
+                  support: bool = False) -> pd.DataFrame:
     qi, ri = pairs["qi"].to_numpy(), pairs["ri"].to_numpy()
     f = cheap.copy()
     chunks = []
@@ -237,4 +238,33 @@ def full_features(q: pd.DataFrame, r: pd.DataFrame, pairs: pd.DataFrame, cheap: 
     rmax, _, rrank = _group_stats(ri, nb)
     f["rev_n_best_rank"] = rrank.astype(F32)
     f["rev_n_best_gap"] = (rmax - nb).astype(F32)
+    if support:
+        support_features(f, q, r, qi, ri)
     return f
+
+
+def _sorted_tokens(x: str) -> str:
+    return " ".join(sorted(set(x.split())))
+
+
+def _within_q_count(qi: np.ndarray, codes: np.ndarray) -> np.ndarray:
+    """For each pair: how many OTHER candidates of the same S1 share this record-side code (-1 = none)."""
+    key = qi.astype(np.int64) * (int(codes.max()) + 2) + codes + 1
+    _, inv, cnt = np.unique(key, return_inverse=True, return_counts=True)
+    return np.where(codes >= 0, cnt[inv] - 1, 0).astype(F32)
+
+
+def support_features(f: pd.DataFrame, q, r, qi, ri) -> None:
+    """Candidate support: the true records of an S1 (3.5 on average) resemble each other; a distractor
+    usually stands alone. Counts of other candidates of the same S1 agreeing with this record."""
+    r_core = pd.Series(r["core"], dtype=object).map(_sorted_tokens)
+    r_addr = pd.Series(r["addr_core"], dtype=object).map(_sorted_tokens)
+    for name, series in (("name", r_core), ("addr", r_addr), ("house", pd.Series(r["house"], dtype=object))):
+        codes, _ = pd.factorize(series)
+        codes = np.where(series.to_numpy() == "", -1, codes)[ri]
+        f[f"sup_{name}"] = _within_q_count(qi, codes)
+    ncand = f["q_ncand"].to_numpy()
+    f["sup_name_share"] = (f["sup_name"].to_numpy() / np.maximum(ncand - 1, 1)).astype(F32)
+    # strength of the best-scored other candidate sharing the name key (sibling agreement)
+    strong = (f["n_best"].to_numpy() >= 0.9) & (f["a_tset"].to_numpy() >= 0.7)
+    f["q_n_name_addr_strong"] = np.bincount(qi, weights=strong.astype(float), minlength=len(q))[qi].astype(F32)

@@ -33,8 +33,9 @@ def test_features_smoke():
                           "in_c5b": [0, 0], "c1_rank": [1, 2], "crowd_size": [1, 0], "cos_name": [1.0, 0.4],
                           "cos_addr": [0.8, 0.0], "c1_score": [0.9, 0.2], "union_rank": [1, 2], "src": [3, 2]})
     ch = cheap_features(q, r, pairs)
-    f = full_features(q, r, pairs, ch)
+    f = full_features(q, r, pairs, ch, support=True)
     assert len(f) == 2 and np.isfinite(f.to_numpy()).all()
+    assert f["sup_name"].tolist() == [0, 0] and f["sup_house"].tolist() == [0, 0]
     assert f["house_eq"].tolist() == [1, 0] and f["legal_eq"].tolist() == [1, 0]
     assert f["a_abbr_r"].iloc[0] == 1.0          # "cir" is a subsequence-abbreviation of "circle"
     assert f["n_skel_cont_q"].iloc[1] == 1.0     # grz / garza share the skeleton
