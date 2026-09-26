@@ -1,0 +1,22 @@
+GPU0: Tesla T4 14.6 GB cc 7.5
+GPU1: Tesla T4 14.6 GB cc 7.5
+torch 2.10.0+cu128
+4 cpus
+               total        used        free      shared  buff/cache   available
+Mem:              31           0          25           0           4          30
+Swap:              0           0           0
+
+secret GITHUB_TOKEN: not available (ConnectionError)
+secret GH_TOKEN: not available (ConnectionError)
+secret github_token: not available (ConnectionError)
+secret GITHUB_PAT: not available (ConnectionError)
+secret github: not available (ConnectionError)
+secret GITHUB: not available (ConnectionError)
+secret gh_token: not available (ConnectionError)
+secret git_token: not available (ConnectionError)
+secret GIT_TOKEN: not available (ConnectionError)
+secret HF_TOKEN: not available (ConnectionError)
+  cells[i][c] = re.sub('\\\\\|', '|', cell)
+  text = re.sub(r'_', '\_', text) # Escape underscores in display text
+[NbConvertApp] Converting notebook __script__.ipynb to html
+[NbConvertApp] Writing 282358 bytes to __results__.html

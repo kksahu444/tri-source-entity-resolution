@@ -32,3 +32,11 @@ venv/
 Thumbs.db
 .vscode/
 .idea/
+
+# --- extracted organiser zip, v2 pipeline outputs ---
+student_resource/6ab10eb3b23ba_student_resource/
+student_resource/artifacts/
+student_resource/output/
+student_resource/submissions/*.tsv
+student_resource/runs/*.err
+student_resource/runs/*.log

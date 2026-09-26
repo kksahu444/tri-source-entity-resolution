@@ -1,0 +1,70 @@
+rows: {'train_s1': 2206821, 'train_s2': 5034616, 'train_s3': 5285603} {'test_s1': 1732544, 'test_s2': 4887273, 'test_s3': 5082316} gt 2206821
+
+=== Block 1: country labels ===
+  train s1: {'US': np.int64(1323633), 'India': np.int64(883188)}
+  train s2: {'US': np.int64(3016817), 'India': np.int64(2017799)}
+  train s3: {'US': np.int64(3170056), 'India': np.int64(2115547)}
+  test s1: {'India': np.int64(809986), 'US': np.int64(663106), 'France': np.int64(259452)}
+  test s2: {'India': np.int64(2312565), 'US': np.int64(1871330), 'France': np.int64(703378)}
+  test s3: {'India': np.int64(2405000), 'US': np.int64(1945701), 'France': np.int64(731615)}
+
+=== Block 2: pool ratio (S2+S3)/S1 per country ===
+  train India: S1=883,188 S2+S3=4,133,346 ratio=4.680  (S2 2.285, S3 2.395)
+  train US: S1=1,323,633 S2+S3=6,186,873 ratio=4.674  (S2 2.279, S3 2.395)
+  test France: S1=259,452 S2+S3=1,434,993 ratio=5.531  (S2 2.711, S3 2.820)
+  test India: S1=809,986 S2+S3=4,717,565 ratio=5.824  (S2 2.855, S3 2.969)
+  test US: S1=663,106 S2+S3=3,817,031 ratio=5.756  (S2 2.822, S3 2.934)
+
+=== Block 3: integrity ===
+  S1 missing from GT: 0; GT ids not in S1: 0; duplicate GT rows: 0
+  matched ids missing from S2/S3: 0 of 7,638,365 pairs
+  matched ids with S1 prefix: 0
+
+=== Block 4: singletons and match counts by country ===
+  India: singleton share 5.59%; mean matches 3.465; dist(0..8+) [np.float64(0.0559), np.float64(0.0537), np.float64(0.1698), np.float64(0.24), np.float64(0.2193), np.float64(0.1464), np.float64(0.0753), np.float64(0.0291), np.float64(0.0106)]
+  US: singleton share 5.58%; mean matches 3.459; dist(0..8+) [np.float64(0.0558), np.float64(0.0542), np.float64(0.1702), np.float64(0.2409), np.float64(0.2194), np.float64(0.1455), np.float64(0.0743), np.float64(0.0289), np.float64(0.0107)]
+
+=== Block 5: matches per source per S1 ===
+  S2 per S1 (among S1s with any match): {0: 0.0789, 1: 0.3787, 2: 0.3133, 3: 0.1603, 4: 0.0572, 5: 0.0116}; share with >=2: 54.23%
+  S3 per S1 (among S1s with any match): {0: 0.0686, 1: 0.3438, 2: 0.3208, 3: 0.1788, 4: 0.0696, 5: 0.017, 6: 0.0014}; share with >=2: 58.75%
+
+=== Block 6: cross-country true pairs ===
+  cross-country pairs: 0 of 7,638,365 (0.00%)
+
+=== Block 7: many-to-one (S2/S3 record matched to 2+ S1) ===
+  records matched to 2+ S1: 0 of 7,638,365 (0.00%)
+  S2/S3 records never matched (distractors): 2,681,854 of 10,320,219 (25.99%)
+
+=== Block 8: ID leakage (numeric id gap of true pairs vs shuffled) ===
+  median gap true 292,947,862 vs shuffled within country 292,811,014
+
+=== Block 9: field completeness and scripts ===
+  train s1 India: empty name 0.00%, empty addr 0.00%, non-Latin name 0.00%, non-Latin addr 0.06%
+  train s1 US: empty name 0.00%, empty addr 0.00%, non-Latin name 0.00%, non-Latin addr 0.00%
+  train s2 India: empty name 0.00%, empty addr 2.87%, non-Latin name 23.51%, non-Latin addr 23.71%
+  train s2 US: empty name 0.00%, empty addr 3.68%, non-Latin name 0.00%, non-Latin addr 0.00%
+  train s3 India: empty name 0.00%, empty addr 3.07%, non-Latin name 13.17%, non-Latin addr 22.52%
+  train s3 US: empty name 0.00%, empty addr 3.50%, non-Latin name 0.00%, non-Latin addr 0.00%
+  test s1 France: empty name 0.00%, empty addr 0.00%, non-Latin name 0.00%, non-Latin addr 0.00%
+  test s1 India: empty name 0.00%, empty addr 0.00%, non-Latin name 0.00%, non-Latin addr 0.06%
+  test s1 US: empty name 0.00%, empty addr 0.00%, non-Latin name 0.00%, non-Latin addr 0.00%
+  test s2 France: empty name 0.00%, empty addr 3.06%, non-Latin name 0.00%, non-Latin addr 0.00%
+  test s2 India: empty name 0.00%, empty addr 2.28%, non-Latin name 23.64%, non-Latin addr 23.85%
+  test s2 US: empty name 0.00%, empty addr 2.94%, non-Latin name 0.00%, non-Latin addr 0.00%
+  test s3 France: empty name 0.00%, empty addr 2.94%, non-Latin name 0.00%, non-Latin addr 0.00%
+  test s3 India: empty name 0.00%, empty addr 2.46%, non-Latin name 13.33%, non-Latin addr 22.92%
+  test s3 US: empty name 0.00%, empty addr 2.84%, non-Latin name 0.00%, non-Latin addr 0.00%
+
+=== Block 10: name crowds (S1) ===
+  train India: exact-name crowd share 43.88%; same core name+city 12.67%; largest name crowd 99
+  train US: exact-name crowd share 34.59%; same core name+city 6.49%; largest name crowd 253
+  test France: exact-name crowd share 34.05%; same core name+city 44.59%; largest name crowd 205
+  test India: exact-name crowd share 43.25%; same core name+city 11.86%; largest name crowd 97
+  test US: exact-name crowd share 27.98%; same core name+city 4.81%; largest name crowd 123
+
+=== Block 11: true-pair number conflicts and legal-token flips ===
+  pairs sampled: 500,000; both have a number: 87.16%
+  num_conflict on true pairs (first digit run differs | both present) r = 20.89%
+  legal_token_equal (last name token equal) on true pairs: 40.48%
+  S2/S3 address empty on true pairs: 4.41%
+  city (2nd-to-last part) equal on true pairs: 52.85%

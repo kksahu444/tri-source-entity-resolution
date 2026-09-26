@@ -1,0 +1,2 @@
+file,run_id,created,oof_f05,public_score,notes
+sub_20260926_1_0926-073916-submit_matching.tsv,0926-073916-submit,2026-09-26T07:39:20,0.97143 (0926-032111-decide),,"iteration 1: C1+C2+C5 blocking, pruner N=8, stage A LightGBM, GFM+count model, b_FR=0 (0926-063314-loco); copied to submissions/upload_1/ for leaderboard upload (26 Sep 08:33); public score pending"

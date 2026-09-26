@@ -1,0 +1,7 @@
+{
+ "macro_f05": 0.97898,
+ "total_loss": 0.02102,
+ "loss_false_links": 0.00469,
+ "loss_model_misses": 0.00683,
+ "loss_blocking": 0.0095
+}

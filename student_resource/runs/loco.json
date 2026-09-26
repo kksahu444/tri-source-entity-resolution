@@ -1,0 +1,60 @@
+{
+ "directions": [
+  {
+   "src": "US",
+   "tgt": "India",
+   "thresholds_src": {
+    "tau1": 0.6,
+    "tau2": 0.69,
+    "score": 0.9778017777692104,
+    "peak": 0.9778017777692104,
+    "peak_tau1": 0.58,
+    "peak_tau2": 0.69
+   },
+   "src_holdout_f05": 0.9778017777692104,
+   "tgt_f05_b0": 0.87092,
+   "b_star": 0.1,
+   "tgt_f05_bstar": 0.87125,
+   "flat_region": [
+    -0.7,
+    0.9
+   ],
+   "temp_best_ab": [
+    0.6,
+    0.4
+   ],
+   "temp_best_f05": 0.87162,
+   "temp_gain_over_offset": 0.00036,
+   "runtime_s": 1376.1
+  },
+  {
+   "src": "India",
+   "tgt": "US",
+   "thresholds_src": {
+    "tau1": 0.6,
+    "tau2": 0.67,
+    "score": 0.9564446889000342,
+    "peak": 0.9564532109748995,
+    "peak_tau1": 0.64,
+    "peak_tau2": 0.67
+   },
+   "src_holdout_f05": 0.9564446889000342,
+   "tgt_f05_b0": 0.95768,
+   "b_star": -0.1,
+   "tgt_f05_bstar": 0.95781,
+   "flat_region": [
+    -1.3,
+    0.8
+   ],
+   "temp_best_ab": [
+    0.8,
+    0.0
+   ],
+   "temp_best_f05": 0.95781,
+   "temp_gain_over_offset": 0.0,
+   "runtime_s": 1914.1
+  }
+ ],
+ "b_fr": 0.0,
+ "offset_alone_incomplete": false
+}
