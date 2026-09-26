@@ -26,12 +26,12 @@ blocking: {k_tfidf: 30, k_bm25: 30, k_dense: 30, crowd_cap: 10, key_block_cap: 2
            c1_generate: 100, rare_df_min: 20000, rare_df_share: 0.005, key_rare_token: true,
            reverse_empty: {enabled: true, k: 10, min_cos: 0.3}, second_hop: {enabled: false}}   # C1 rare-feature generation; C5a key uses the rarest street token
 prune: {pc_tolerance: 0.005, reverse_keep: 3}
-features: {support: true, gen: true}   # iteration 3: + generator-aware features and anchor agreement
+features: {support: true, gen: true, consistency: true}   # iteration 3: + generator-aware, anchor agreement, consistency (features only)
 cross_encoder: {backbone: auto, max_len: auto, band: auto, epochs: 2}
 decision: {rule: two_threshold, max_m: 30}   # later gfm_count or gfm_indep, whichever wins out-of-fold
 france: {offset: loco_prior}                 # distribution_matching | em only if ALLOW_TEST_PRED_FIT
 
 stack_b: true                        # iteration 2: stage-B context stacking on stage-A probabilities
-stack: {test_models: full}             # iteration 3: one all-dev model for test inference (5x fewer test passes)
 # iteration 3: C7 reverse name channel for empty-address records (error analysis: 59% of blocking loss);
 # C6 second-hop off (measured: recovers ~5% of misses for ~4 extra candidates per S1)
+stack_b_test_context: per_fold      # work order T2: stage-B test context from each stage-A fold model; no full-data refit
