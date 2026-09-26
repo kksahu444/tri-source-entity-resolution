@@ -1,7 +1,8 @@
 # Methodology: Business Entity Resolution (Amazon ML Challenge 2026)
 
-> **Draft.** Copy these sections into the organisers' `Documentation_template.md` when it is
-> available, and replace every `TBD` with the final numbers from `artifacts/train_report.json`.
+> **Superseded.** This describes the root `main.py` testbed of 25 Sep, not the submitted pipeline. The
+> methodology document that ships is `student_resource/docs_draft/Documentation_draft.md`, passed to
+> `python -m src.package --team <TEAM> --doc ../../docs_draft/Documentation_draft.md`.
 
 **Team:** TBD · **Final public LB (macro F0.5):** TBD · **OOF macro F0.5 (5-fold grouped CV):** TBD
 
