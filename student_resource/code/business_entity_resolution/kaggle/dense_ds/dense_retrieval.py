@@ -1,7 +1,7 @@
 """C4 dense channel, Aditya's kaggle/dense kernel with the data read from a private Kaggle dataset.
 
 The original fetches the release inside the kernel through a GITHUB_TOKEN secret; here the seven
-source/ground-truth .tsv.gz files come from dataset ashuwhy/amlc26-raw instead, so no secret is needed.
+source files come from dataset ashuwhy/amlc26-raw instead, so no secret is needed.
 Everything after fetch() is unchanged. Output: /kaggle/working/dense_{split}.parquet (s1, cand, score).
 """
 import gzip
@@ -37,6 +37,10 @@ def gpu_profile():
 def fetch():
     import glob
     os.makedirs(DATA, exist_ok=True)
+    # Kaggle stores uploaded .tsv.gz files decompressed; link those, unpack any that stayed gzipped
+    for src in glob.glob("/kaggle/input/**/*.tsv", recursive=True):
+        os.symlink(src, os.path.join(DATA, os.path.basename(src)))
+        log("linked", os.path.basename(src))
     for src in glob.glob("/kaggle/input/**/*.tsv.gz", recursive=True):
         dst = os.path.join(DATA, os.path.basename(src)[:-3])
         with gzip.open(src, "rb") as s, open(dst, "wb") as o:
