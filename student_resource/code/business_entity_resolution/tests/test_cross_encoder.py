@@ -104,7 +104,8 @@ def _write_dev(tmp, n_s1=1500, seed=0):
     pd.DataFrame({"src3": rng.integers(0, 2, len(qi)), "addr_r_empty": rng.integers(0, 2, len(qi)),
                   "n_parts_q": rng.integers(1, 4, len(qi)), "q_name_city_crowd": rng.integers(1, 5, len(qi))}
                  ).to_parquet(f"{tmp}/feat/dev_US.parquet")
-    for name, p in (("dev_US.parquet", base), ("dev_US_base.parquet", base), ("dev_US_ce.parquet", sharp)):
+    for name, p in (("dev_US.parquet", base), ("dev_US_base.parquet", base), ("dev_US_stageA.parquet", base),
+                    ("dev_US_ce.parquet", sharp)):
         pd.DataFrame({"qi": qi, "ri": ri, "y": y, "p": p}).to_parquet(f"{tmp}/pred/{name}")
     uni = pd.DataFrame({"entity_id": [f"S{i}" for i in range(n_s1)], "n_true": n_true, "fold": np.arange(n_s1) % 5})
     return uni, sharp
@@ -114,17 +115,58 @@ def test_decide_picks_stack_variant(tmp_path, monkeypatch):
     from src import decide
     uni, sharp = _write_dev(str(tmp_path))
     monkeypatch.setattr(decide, "build_dev_universe", lambda cfg: uni)
-    cfg = {"seed": 1, "paths": {"artifacts": str(tmp_path), "runs": str(tmp_path)}, "flags": {"HARD_ASSIGNMENT": True}}
+    cfg = {"seed": 1, "paths": {"artifacts": str(tmp_path), "runs": str(tmp_path)}, "flags": {"HARD_ASSIGNMENT": True},
+           "stack_b": True}
     res = decide.run(cfg, "dev")
     dec = pickle.load(open(tmp_path / "decision.pkl", "rb"))
     assert dec["stack_variant"] == "ce", res["notes"]
     assert np.allclose(pd.read_parquet(tmp_path / "pred" / "dev_US.parquet")["p"], sharp)
     notes = __import__("json").loads(res["notes"])
-    assert notes["gain_vs_base"]["ci"][0] > 0 and set(notes["variants"]) == {"base", "ce"}
-    # without the cross-encoder predictions only the base variant is fitted
+    assert set(notes["variants"]) == {"A", "base", "ce"}
+    assert notes["variant_gains"]["base"]["ci"][0] <= 0 < notes["variant_gains"]["ce"]["ci"][0]   # base == A: no gain
+    # without the cross-encoder predictions: stage B does not beat stage A, the simpler variant stays
     os.remove(tmp_path / "pred" / "dev_US_ce.parquet")
     decide.run(cfg, "dev")
-    assert pickle.load(open(tmp_path / "decision.pkl", "rb"))["stack_variant"] == "base"
+    assert pickle.load(open(tmp_path / "decision.pkl", "rb"))["stack_variant"] == "A"
+    # stage B off: only stage A is fitted
+    cfg["stack_b"] = False
+    assert __import__("json").loads(decide.run(cfg, "dev")["notes"])["variants"] == {"A": pytest.approx(0, abs=1)}
+
+
+def test_stackb_test_passes_stage_a_through(tmp_path):
+    from src import stack_b
+    tmp = str(tmp_path)
+    for d in ("block", "feat", "pred"):
+        os.makedirs(f"{tmp}/{d}")
+    pd.DataFrame({"qi": [0]}).to_parquet(f"{tmp}/block/test_US_pairs.parquet")
+    a = pd.DataFrame({"qi": [0, 0, 1], "ri": [3, 4, 5], "p": [0.9, 0.2, 0.6]})
+    a.to_parquet(f"{tmp}/pred/test_US_stageA.parquet")
+    pickle.dump({"stack_variant": "A"}, open(f"{tmp}/decision.pkl", "wb"))
+    res = stack_b.run({"seed": 1, "paths": {"artifacts": tmp, "runs": tmp}}, "test")
+    assert __import__("json").loads(res["notes"])["variant"] == "A"
+    pd.testing.assert_frame_equal(pd.read_parquet(f"{tmp}/pred/test_US.parquet"), a)
+
+
+def test_synthetic_decoys():
+    import pyarrow as pa
+
+    from src.blocking.union import synthetic_decoys
+    r = pd.DataFrame({"entity_id": ["S2-1", "S3-2", "S2-3", "S2-9"], "name_a": ["Acme LLC", "ACME", "Acme Inc", "Zed"],
+                      "core": ["acme", "acme", "acme", "zed"], "addr_a": ["0120 Main St, Reno", "120 MAIN ST", "120 Main Street", "5 Elm"],
+                      "addr_b": ["120 main st, reno", "120 main st", "120 main street", "5 elm"],
+                      "addr_core": ["120 main st reno", "120 main st", "120 main street", "5 elm"],
+                      "house": ["120", "120", "120", "5"], "nums": ["120 7", "120", "120", "5"], "src": [2, 3, 2, 2]})
+    q = pa.table({"entity_id": ["S1-a", "S1-b"]})
+    gt = pd.DataFrame({"s1_id": ["S1-a"] * 3 + ["S1-b"], "cand_id": ["S2-1", "S3-2", "S2-3", "S2-9"]})
+    syn = synthetic_decoys(q, pa.Table.from_pandas(r, preserve_index=False), gt, per_query=10.0, max_records=2, seed=0).to_pandas()
+    a = syn[syn.core == "acme"]
+    assert len(a) == 2 and a.entity_id.str.match(r"S[23]-SYN\d+").all() and a.house.nunique() == 1
+    h = a.house.iloc[0]
+    assert h != "120" and 1 <= abs(int(h) - 120) <= 30
+    assert all(h in x and "120" not in x for x in a.addr_a)
+    assert all(x.startswith(h + " ") for x in a.addr_core) and all("120" not in x for x in a.addr_b)
+    assert set(a.name_a) <= {"Acme LLC", "ACME", "Acme Inc"}
+    assert synthetic_decoys(q, pa.Table.from_pandas(r, preserve_index=False), gt, 0.0, 2, 0).num_rows == 0
 
 
 def test_stackb_test_uses_ce_variant(tmp_path):

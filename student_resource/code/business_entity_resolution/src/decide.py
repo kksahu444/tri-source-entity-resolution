@@ -4,10 +4,12 @@ Rules compared out-of-fold: two thresholds (per country), GFM with independence,
 model. The simpler rule is kept unless the paired bootstrap interval of the gain excludes zero.
 France gets the pooled thresholds / count model and the offset b_FR (D9) applied to its calibrated
 probabilities before count features, assignment and the rule.
-Stage-B variants (work order T6): when stage B was also trained with the cross-encoder logit, the whole
-decision layer is fitted for both variants and the cross-encoder variant is kept only if the paired
-bootstrap interval of its per-entity gain (same dev entities, each variant with its own chosen rule)
-excludes zero. The choice is stored in decision.pkl ("stack_variant") and used by the test pass.
+Model variants: "A" (stage-A probabilities), "base" (stage B), "ce" (stage B + cross-encoder logit). The
+whole decision layer is fitted for each; starting from the simplest ("A"), the next variant replaces the
+current one only if the paired bootstrap interval of its per-entity gain (same dev entities, each variant
+with its own chosen rule) excludes zero. Upload 2 showed why the simpler model is the default: stage B's
+candidate-agreement features transferred badly to test decoys (runs/decoy_shift.md). The choice is stored
+in decision.pkl ("stack_variant") and used by the test pass.
 """
 from __future__ import annotations
 
@@ -166,24 +168,27 @@ def run(cfg: dict, split: str = "dev") -> dict:
     if split == "dev":
         dev = build_dev_universe(cfg).set_index("entity_id")
         aux = {c: pd.read_parquet(os.path.join(fd, f"dev_{c}.parquet"), columns=AUX) for c in cs}
-        variants = ["base"] + (["ce"] if all(os.path.exists(os.path.join(pdir, f"dev_{c}_ce.parquet")) for c in cs) else [])
+        files = {"A": "dev_{}_stageA.parquet", "base": "dev_{}_base.parquet", "ce": "dev_{}_ce.parquet"}
+        if not all(os.path.exists(os.path.join(pdir, files["base"].format(c))) for c in cs):
+            files["base"] = "dev_{}.parquet"              # stage B off: dev_{c} holds the stage-A output
+        variants = [v for v in ("A", "base", "ce") if all(os.path.exists(os.path.join(pdir, files[v].format(c))) for c in cs)]
+        if not cfg.get("stack_b", False):
+            variants = ["A"]
         fits = {}
         for v in variants:
-            name = (lambda c: f"dev_{c}.parquet") if v == "base" else (lambda c: f"dev_{c}_{v}.parquet")
-            preds = {c: pd.read_parquet(os.path.join(pdir, name(c))) for c in cs}
+            preds = {c: pd.read_parquet(os.path.join(pdir, files[v].format(c))) for c in cs}
             fits[v] = _fit_dev(cfg, cs, preds, aux, dev, t)
             log.info("decide dev variant %s: %s %.5f (%.0fs)", v, fits[v][1], fits[v][0][fits[v][1]].mean(), t())
-        var = "base"
-        if "ce" in fits:
-            g, lo, hi = _paired_gain_ci(fits["base"][0][fits["base"][1]], fits["ce"][0][fits["ce"][1]])
-            fits["ce"][2]["gain_vs_base"] = {"gain": round(g, 5), "ci": [round(lo, 5), round(hi, 5)],
-                                             "f05_base": round(float(fits["base"][0][fits["base"][1]].mean()), 5)}
+        var = variants[0]
+        for v in variants[1:]:
+            g, lo, hi = _paired_gain_ci(fits[var][0][fits[var][1]], fits[v][0][fits[v][1]])
+            fits[v][2][f"gain_vs_{var}"] = {"gain": round(g, 5), "ci": [round(lo, 5), round(hi, 5)]}
             if lo > 0:
-                var = "ce"
-                for c in cs:                     # downstream analyses read dev_{c}.parquet
-                    pd.read_parquet(os.path.join(pdir, f"dev_{c}_ce.parquet")).to_parquet(
-                        os.path.join(pdir, f"dev_{c}.parquet"), index=False)
+                var = v
+        for c in cs:                             # downstream analyses read dev_{c}.parquet
+            pd.read_parquet(os.path.join(pdir, files[var].format(c))).to_parquet(os.path.join(pdir, f"dev_{c}.parquet"), index=False)
         F, chosen, info, payload, nt, ctry = fits[var]
+        info["variant_gains"] = {v: fits[v][2][k] for v in variants[1:] for k in fits[v][2] if k.startswith("gain_vs_")}
         info["stack_variant"] = var
         info["variants"] = {v: round(float(f[0][f[1]].mean()), 5) for v, f in fits.items()}
         res.update(summary(F[chosen], nt, ctry))

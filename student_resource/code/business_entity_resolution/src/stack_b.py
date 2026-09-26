@@ -255,8 +255,13 @@ def run(cfg: dict, split: str = "dev") -> dict:
         info["variants"] = list(variants)
     else:
         variant = stack_variant(cfg)
-        st = pickle.load(open(_model_path(fd, variant), "rb"))
         info["variant"] = variant
+        if variant == "A":                       # decide kept stage A: its test probabilities go to decide as they are
+            for c in cs:
+                pd.read_parquet(os.path.join(pdir, f"{split}_{c}_stageA.parquet"), columns=["qi", "ri", "p"]).to_parquet(
+                    os.path.join(pdir, f"{split}_{c}.parquet"), index=False)
+            return {"stage": "stackb", "runtime_s": t(), "notes": json.dumps(info)}
+        st = pickle.load(open(_model_path(fd, variant), "rb"))
         mode = cfg.get("stack_b_test_context", "average")
         for c in cs:
             df, pa, keys, cons = _load(cfg, split, c)

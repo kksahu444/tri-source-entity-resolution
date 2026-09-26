@@ -22,6 +22,7 @@ normalize:
 dev:
   city_group_share: 0.30             # share of (country, city) groups in the dev universe
   orphan_share: 0.19                 # D0 block 2: dev S1 dropped from the queries, records kept as distractors
+  decoys: {enabled: true, max_records: 3, per_query: {US: 0.132, India: 0.006}}   # test-like dev: multi-record near-duplicate decoys (runs/decoy_shift.md)
 blocking: {k_tfidf: 30, k_bm25: 30, k_dense: 30, crowd_cap: 10, key_block_cap: 200, key_keep: 10, query_chunk: 100000,
            c1_generate: 100, rare_df_min: 20000, rare_df_share: 0.005, key_rare_token: true,
            reverse_empty: {enabled: true, k: 25, forward_k: 5, min_cos: 0.3}, second_hop: {enabled: false},
@@ -40,3 +41,6 @@ stack_b_test_context: per_fold      # work order T2: stage-B test context from e
 # blocking misses); cross-encoder logit as a stage-B feature, kept only if the paired bootstrap on dev says so
 # final run (config_v5) = v4 + C7 forward pass (each S1 takes its top-5 empty-address records; measured on a
 # test-sized pool in runs/c7_scale.md: reverse-only PC on blank-address targets 0.90 dev -> 0.77 test size, 0.90 with forward)
+# + test-like dev: synthetic multi-record near-duplicate decoy entities in the dev pool at the rate measured on test
+#   (upload 2: 0.938 public vs upload 1 0.960; stage-B/support features over-linked test decoys); decide starts from
+#   stage A and adopts stage B / cross-encoder only on a paired-bootstrap gain on this dev

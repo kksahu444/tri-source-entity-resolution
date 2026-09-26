@@ -14,7 +14,7 @@ import time
 import zipfile
 
 IN, TMP, W = "/kaggle/input", "/kaggle/tmp", "/kaggle/working"
-CONFIG = os.environ.get("ER_CONFIG", "config_v4.yaml")
+CONFIG = os.environ.get("ER_CONFIG", "config_v5.yaml")
 STAGE = os.environ.get("ER_STAGE", "all")
 
 
@@ -70,6 +70,9 @@ def main():
                     "output": f"{W}/output", "submissions": f"{W}/submissions"}
     cfg["normalize"]["workers"] = os.cpu_count()
     cfg["model"] = {"backend": "xgboost_gpu" if gpu else "lightgbm"}
+    if not gpu and (cfg.get("cross_encoder") or {}).get("enabled"):
+        cfg["cross_encoder"]["enabled"] = False            # CPU session: no cross-encoder (the GPU kernel runs it)
+        print("no GPU: cross-encoder disabled", flush=True)
     yaml.safe_dump(cfg, open(f"{code}/config_kaggle.yaml", "w", encoding="utf-8"), sort_keys=False)
     print("backend:", cfg["model"]["backend"], flush=True)
 

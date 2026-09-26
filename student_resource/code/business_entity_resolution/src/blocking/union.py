@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 
 import numpy as np
 import pandas as pd
@@ -103,6 +104,69 @@ def address_only_channel(qa, ra, k: int, min_cos: float, generate: int, cap: int
     keep = s >= min_cos
     aq, ar, _ = _topn_per_q(gq[keep], gr[keep], s[keep], k)
     return aq.astype(np.int32), ar.astype(np.int32)
+
+
+NAME_COLS = ("name_b", "core", "legal", "alt", "f_tag", "f_lead", "f_bang", "f_digits", "f_nonlatin", "name_a")
+
+
+def _shift_house(text: str, old: str, new: str) -> str:
+    """Replace the first standalone occurrence of house number ``old`` (leading zeros allowed)."""
+    return re.sub(rf"(?<![0-9])0*{old}(?![0-9])", new, text, count=1)
+
+
+def synthetic_decoys(q_tbl: pa.Table, r_tbl: pa.Table, gt: pd.DataFrame, per_query: float, max_records: int,
+                     seed: int) -> pa.Table:
+    """Test-like dev pool: multi-record near-duplicate decoy entities.
+
+    Measured on test (runs/decoy_shift.md): test pools hold groups of 2+ records with a dev S1's name and
+    street but a nearby house number (+-2..21) and no S1 of their own (an entity whose S1 was withheld).
+    Train decoys are single records, so "other candidates support this house" is a safe signal on dev and
+    a trap on test (iteration 2-3 over-linked by 0.37 links per US S1). For a random share of dev queries,
+    this copies up to ``max_records`` of the query's true records into one unowned decoy entity: house
+    number shifted by the same offset in every field, names rotated among the copies (each decoy record
+    carries another true record's name noise). ``per_query`` = extra decoy records per dev query.
+    Returns rows with the pool schema and new S2-/S3-SYN ids; ground truth is unchanged (they match nothing).
+    """
+    rng = np.random.default_rng(seed)
+    if per_query <= 0:
+        return r_tbl.schema.empty_table()
+    rpos = pd.Series(np.arange(r_tbl.num_rows), index=r_tbl["entity_id"].to_numpy(zero_copy_only=False))
+    house = r_tbl["house"].to_numpy(zero_copy_only=False)
+    g = gt[gt["s1_id"].isin(set(q_tbl["entity_id"].to_pylist())) & gt["cand_id"].isin(rpos.index)]
+    g = g[house[rpos.reindex(g["cand_id"]).to_numpy()] != ""]
+    groups = g.groupby("s1_id")["cand_id"].apply(list)
+    if not len(groups):
+        return r_tbl.schema.empty_table()
+    size = groups.map(lambda x: min(len(x), max_records)).to_numpy()
+    share = min(1.0, per_query * q_tbl.num_rows / max(float(size.sum()), 1.0))
+    groups = groups[rng.random(len(groups)) < share]
+    need = np.unique(rpos.reindex([c for cs in groups for c in cs]).to_numpy())
+    r = r_tbl.take(pa.array(need)).to_pandas()
+    rpos = pd.Series(np.arange(len(r)), index=r["entity_id"])
+    rows, n = [], 0
+    for cands in groups:
+        cands = list(rng.permutation(cands))[:max_records]
+        idx = rpos.reindex(cands).to_numpy()
+        off = int(round(np.exp(rng.uniform(np.log(1.5), np.log(30))))) * (1 if rng.random() < 0.5 else -1)
+        for j, i in enumerate(idx):
+            row = r.iloc[i].to_dict()
+            name_src = r.iloc[idx[(j + 1) % len(idx)]]
+            for c in NAME_COLS:
+                if c in row:
+                    row[c] = name_src[c]
+            old = row["house"]
+            new = str(max(1, int(old) + off)) if old.isdigit() else old
+            if new == old:
+                new = str(int(old) + abs(off)) if old.isdigit() else old
+            for c in ("addr_b", "addr_core", "addr_a"):
+                row[c] = _shift_house(row[c], old, new)
+            row["nums"] = " ".join(new if t == old else t for t in row["nums"].split())
+            row["house"] = new
+            row["entity_id"] = f"S{int(row['src'])}-SYN{n}"
+            rows.append(row)
+            n += 1
+    out = pd.DataFrame(rows, columns=r.columns)
+    return pa.Table.from_pandas(out, schema=r_tbl.schema, preserve_index=False)
 
 
 def record_key_codes(r: pd.DataFrame, names: list[str]) -> dict:
@@ -291,12 +355,20 @@ def run(cfg: dict, split: str = "dev", frac: float | None = None) -> dict:
         rng = np.random.default_rng(cfg["seed"])
         s1_tbl = s1_tbl.filter(pa.array(rng.random(s1_tbl.num_rows) < frac))
     res = {"stage": "block_bench" if frac else "block", "notes": ""}
-    stats = {}
+    stats, n_syn = {}, {}
     for country in sorted(set(s1_tbl["country"].to_pylist())):
         q_tbl = s1_tbl.filter(pc.equal(s1_tbl["country"], country))
         q = q_tbl.select(BLOCK_COLS).to_pandas()
         tbl_r = pa.concat_tables([pq.read_table(norm_path(cfg, src_split, k), filters=[("country", "=", country)])
                                   for k in (2, 3)])
+        dc = (cfg.get("dev") or {}).get("decoys") or {}
+        if split == "dev" and dc.get("enabled", False):
+            syn = synthetic_decoys(q_tbl, tbl_r, gt, dc.get("per_query", {}).get(country, 0.0), dc.get("max_records", 3),
+                                   cfg["seed"] + sum(map(ord, country)))
+            tbl_r = pa.concat_tables([tbl_r, syn])
+            n_syn[country] = syn.num_rows
+            log.info("block dev %s: %s synthetic decoy records (%.3f per query)", country, f"{syn.num_rows:,}",
+                     syn.num_rows / max(q_tbl.num_rows, 1))
         r = tbl_r.select(BLOCK_COLS).to_pandas()
         log.info("block %s %s: loaded %s queries, %s records (%.0fs)", split, country, f"{len(q):,}", f"{len(r):,}", t())
         pairs, info = block_country(cfg, q, r)
@@ -312,7 +384,7 @@ def run(cfg: dict, split: str = "dev", frac: float | None = None) -> dict:
             info.update(completeness(pairs, q, r, gt))
             res[f"PC_union_{country}"] = info["PC_union"]
             res[f"RR_{country}"] = info["RR"]
-        info.update({"n_q": len(q), "n_r": len(r)})
+        info.update({"n_q": len(q), "n_r": len(r), "n_synthetic_decoys": n_syn.get(country, 0)})
         stats[country] = info
         log.info("block %s %s: %s", split, country, json.dumps(info))
         del q, r, pairs, q_tbl
