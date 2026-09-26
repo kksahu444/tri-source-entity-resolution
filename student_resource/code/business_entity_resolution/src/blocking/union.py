@@ -22,7 +22,7 @@ from .. import io_utils
 from ..cv import build_dev_universe
 from ..normalize import norm_path
 from ..utils import Timer, get_logger
-from .crowd import crowd_channel, key_channel
+from .crowd import crowd_channel, key_channel, second_hop_channel
 from .tfidf import TfidfSpace, combined, pair_cos, topk
 
 log = get_logger()
@@ -80,6 +80,23 @@ def house_key(df: pd.DataFrame, street_df: dict | None = None) -> pd.Series:
     ct = first_alpha(df["city"], 2)
     tail = st.where(st != "", ct)
     return (df["house"] + "|" + tail).where((df["house"] != "") & (tail != ""), "")
+
+
+def record_key_codes(r: pd.DataFrame, names: list[str]) -> dict:
+    """Exact record keys for C6: int code per record, -1 where a key part is empty."""
+    core = r["core"].astype(str)
+    parts = {"name": core, "house": r["house"].astype(str), "city": r["city"].astype(str),
+             "addr": r["addr_core"].astype(str)}
+    out = {}
+    for name in names:
+        cols = [parts[p] for p in name.split("+")]
+        key = cols[0]
+        for c in cols[1:]:
+            key = key + "|" + c
+        empty = np.logical_or.reduce([(c == "").to_numpy() for c in cols])
+        codes, _ = pd.factorize(key)
+        out[name] = np.where(empty, -1, codes).astype(np.int64)
+    return out
 
 
 def name_city_key(df: pd.DataFrame) -> pd.Series:
@@ -141,6 +158,19 @@ def block_country(cfg, q: pd.DataFrame, r: pd.DataFrame) -> tuple[pd.DataFrame, 
 
     n_r = np.int64(len(r))
     chans = {"c1": (c1q, c1r), "c2": (c2q, c2r), **{k: v[:2] for k, v in keys.items()}}
+    sh = bc.get("second_hop") or {}
+    if sh.get("enabled", False):
+        # C6: expand from confident first-pass pairs through exact record keys (query expansion)
+        first = np.unique(np.concatenate([a.astype(np.int64) * n_r + b for a, b in chans.values()]))
+        fq, fr = (first // n_r).astype(np.int32), (first % n_r).astype(np.int32)
+        fs = 0.5 * (pair_cos(qn, rn, fq, fr) + pair_cos(qa, ra, fq, fr))
+        anc = fs >= sh.get("anchor_c1", 0.8)
+        c6q, c6r = second_hop_channel(fq[anc], fr[anc], record_key_codes(r, sh.get("keys", ["name+house"])),
+                                      sh.get("cap", 20))
+        chans["c6"] = (c6q, c6r)
+        info["c6_anchors"] = int(anc.sum())
+        info["t_c6"] = t()
+        log.info("  C6: %s pairs from %s anchors (%.0fs)", f"{len(c6q):,}", f"{anc.sum():,}", t())
     all_keys = np.unique(np.concatenate([a.astype(np.int64) * n_r + b for a, b in chans.values()]))
     pairs = pd.DataFrame({"qi": (all_keys // n_r).astype(np.int32), "ri": (all_keys % n_r).astype(np.int32)})
     for name, (a, b) in chans.items():

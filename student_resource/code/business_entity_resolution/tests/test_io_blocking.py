@@ -64,6 +64,20 @@ def test_hash_tfidf_matches_sklearn():
     assert np.allclose((xh @ xh.T).toarray(), (xs @ xs.T).toarray(), atol=1e-5)
 
 
+def test_second_hop_channel_and_keys():
+    from src.blocking.crowd import second_hop_channel
+    from src.blocking.union import record_key_codes
+    r = pd.DataFrame({"core": ["indo inds", "indo inds", "indo inds", "other", ""],
+                      "house": ["34", "34", "19", "34", "34"], "city": ["haliyal"] * 5, "addr_core": ["x"] * 5})
+    codes = record_key_codes(r, ["name+house", "name+city"])
+    assert codes["name+house"][0] == codes["name+house"][1] != codes["name+house"][2] and codes["name+house"][4] == -1
+    # anchor (q=7, r=0): name+house adds record 1; name+city adds records 1 and 2; nothing else
+    qi, ri = second_hop_channel(np.array([7]), np.array([0]), codes, cap=20)
+    assert set(zip(qi.tolist(), ri.tolist())) == {(7, 0), (7, 1), (7, 2)}
+    qi, ri = second_hop_channel(np.array([7]), np.array([0]), codes, cap=2)      # name+city key has 3 records
+    assert set(zip(qi.tolist(), ri.tolist())) == {(7, 0), (7, 1)}
+
+
 def test_crowd_and_key_channels():
     qk = pd.Series(["a b", "c", ""])
     rk = pd.Series(["a b"] * 3 + ["c"] * 12 + [""])

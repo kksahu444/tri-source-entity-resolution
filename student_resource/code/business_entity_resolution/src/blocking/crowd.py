@@ -58,6 +58,27 @@ def crowd_channel(q_keys, r_keys, qa, ra, cap: int, max_pairs: int = 20_000_000)
     return qi, ri, rs
 
 
+def second_hop_channel(anchor_q: np.ndarray, anchor_r: np.ndarray, r_codes: dict, cap: int):
+    """C6: from confident anchor pairs (q, r_a), propose every record sharing an exact key with r_a.
+
+    r_codes: {key name: int code per record, -1 where the key is empty}. Keys held by more than `cap`
+    records are skipped. Returns (qi, ri) pairs, the anchors themselves included (deduplicated later)."""
+    out_q, out_r = [], []
+    for code in r_codes.values():
+        size = np.bincount(code[code >= 0]) if (code >= 0).any() else np.zeros(0, np.int64)
+        rec = pd.DataFrame({"k": code, "ri": np.arange(len(code), dtype=np.int32)})
+        rec = rec[rec["k"] >= 0]
+        rec = rec[size[rec["k"].to_numpy()] <= cap]
+        anc = pd.DataFrame({"qi": anchor_q.astype(np.int32), "k": code[anchor_r]})
+        anc = anc[anc["k"] >= 0].drop_duplicates()
+        m = anc.merge(rec, on="k")
+        out_q.append(m["qi"].to_numpy(np.int32))
+        out_r.append(m["ri"].to_numpy(np.int32))
+    if not out_q:
+        return np.zeros(0, np.int32), np.zeros(0, np.int32)
+    return np.concatenate(out_q), np.concatenate(out_r)
+
+
 def key_channel(q_keys, r_keys, cap: int):
     """Hash join; blocks holding more than ``cap`` records are skipped (counted)."""
     qc, rc = _codes(q_keys, r_keys)
