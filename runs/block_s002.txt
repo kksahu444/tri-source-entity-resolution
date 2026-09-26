@@ -1,3 +1,265 @@
-00:35:00 entity_resolution.io train: 12,527,040 records (S1=2206821, S2=5034616, S3=5285603), labels=True
-00:35:00 entity_resolution.pipeline [train] load done in 52.6s
-00:35:02 entity_resolution.pipeline sampled 43,948 of 2,206,821 S1 records
+00:51:52 entity_resolution.io train: 12,527,040 records (S1=2206821, S2=5034616, S3=5285603), labels=True
+00:51:52 entity_resolution.pipeline [train] load done in 44.4s
+00:51:53 entity_resolution.pipeline sampled 43,948 of 2,206,821 S1 records
+01:02:39 entity_resolution.blocking blocking: 738,588 candidate pairs for 17,496 S1 records (42.2 per record)
+01:02:39 entity_resolution.pipeline [train/india] 4,150,842 records done in 644.7s
+01:16:05 entity_resolution.blocking blocking: 1,037,458 candidate pairs for 26,452 S1 records (39.2 per record)
+01:16:05 entity_resolution.pipeline [train/us] 6,213,325 records done in 803.9s
+01:16:15 entity_resolution.pipeline blocking report: {
+  "n_candidate_pairs": 1776046,
+  "pair_recall": 0.9693514320869056,
+  "mean_candidates_per_s1": 40.412441976881766,
+  "upper_bound_macro_f": 0.9892182557714844,
+  "reduction_ratio": 0.9999960841487979,
+  "max_candidates_per_s1": 77,
+  "pair_recall_S2": 0.970748400939745,
+  "pair_recall_S3": 0.9680383947717758,
+  "at_cut": {
+    "1": {
+      "n_candidate_pairs": 91880,
+      "pair_recall": 0.4638671939255565,
+      "mean_candidates_per_s1": 2.090652589423865,
+      "upper_bound_macro_f": 0.8030485686618488
+    },
+    "2": {
+      "n_candidate_pairs": 181911,
+      "pair_recall": 0.7331508543831137,
+      "mean_candidates_per_s1": 4.139232729589515,
+      "upper_bound_macro_f": 0.9237733370679293
+    },
+    "3": {
+      "n_candidate_pairs": 272477,
+      "pair_recall": 0.8559030405116429,
+      "mean_candidates_per_s1": 6.199986347501593,
+      "upper_bound_macro_f": 0.9565192463586129
+    },
+    "5": {
+      "n_candidate_pairs": 454886,
+      "pair_recall": 0.9210756607733861,
+      "mean_candidates_per_s1": 10.35055065076909,
+      "upper_bound_macro_f": 0.9720591261105287
+    },
+    "10": {
+      "n_candidate_pairs": 913364,
+      "pair_recall": 0.945269474473783,
+      "mean_candidates_per_s1": 20.782834258669336,
+      "upper_bound_macro_f": 0.9800984610080621
+    },
+    "15": {
+      "n_candidate_pairs": 1263424,
+      "pair_recall": 0.9570077838677203,
+      "mean_candidates_per_s1": 28.748156912715025,
+      "upper_bound_macro_f": 0.9842348493617635
+    },
+    "20": {
+      "n_candidate_pairs": 1543480,
+      "pair_recall": 0.9684302643093544,
+      "mean_candidates_per_s1": 35.120597069263674,
+      "upper_bound_macro_f": 0.9888132297592024
+    },
+    "30": {
+      "n_candidate_pairs": 1776046,
+      "pair_recall": 0.9693514320869056,
+      "mean_candidates_per_s1": 40.412441976881766,
+      "upper_bound_macro_f": 0.9892182557714844
+    }
+  },
+  "channels": {
+    "full_char": {
+      "pair_recall": 0.9478553240207658,
+      "only_this_recall": 0.04109066264862055,
+      "share_of_pairs": 0.6841320551382115
+    },
+    "addr_word": {
+      "pair_recall": 0.7930004408445792,
+      "only_this_recall": 0.008329988616998178,
+      "share_of_pairs": 0.2493769868573224
+    },
+    "key": {
+      "pair_recall": 0.6433304163020378,
+      "only_this_recall": 0.0022371217454813432,
+      "share_of_pairs": 0.15207714214609305
+    },
+    "crowd": {
+      "pair_recall": 0.5344023266066154,
+      "only_this_recall": 0.006145505030234043,
+      "share_of_pairs": 0.1968389332258286
+    }
+  },
+  "by_country": {
+    "india": {
+      "n_candidate_pairs": 738588,
+      "pair_recall": 0.9451443569553806,
+      "mean_candidates_per_s1": 42.21467764060357,
+      "upper_bound_macro_f": 0.9795255722812725,
+      "reduction_ratio": 0.9999897868028371,
+      "max_candidates_per_s1": 68,
+      "pair_recall_S2": 0.9499306940734981,
+      "pair_recall_S3": 0.9406328670214461,
+      "at_cut": {
+        "1": {
+          "n_candidate_pairs": 36001,
+          "pair_recall": 0.4386975065616798,
+          "mean_candidates_per_s1": 2.0576703246456334,
+          "upper_bound_macro_f": 0.7821850323060409
+        },
+        "2": {
+          "n_candidate_pairs": 71677,
+          "pair_recall": 0.694488188976378,
+          "mean_candidates_per_s1": 4.096764974851395,
+          "upper_bound_macro_f": 0.9026432670214377
+        },
+        "3": {
+          "n_candidate_pairs": 107362,
+          "pair_recall": 0.8115321522309711,
+          "mean_candidates_per_s1": 6.136374028349337,
+          "upper_bound_macro_f": 0.9357372916619819
+        },
+        "5": {
+          "n_candidate_pairs": 179009,
+          "pair_recall": 0.8764599737532809,
+          "mean_candidates_per_s1": 10.231424325560129,
+          "upper_bound_macro_f": 0.9526374386773385
+        },
+        "10": {
+          "n_candidate_pairs": 358379,
+          "pair_recall": 0.9055446194225721,
+          "mean_candidates_per_s1": 20.483481938728854,
+          "upper_bound_macro_f": 0.9634583949726067
+        },
+        "15": {
+          "n_candidate_pairs": 507642,
+          "pair_recall": 0.9223097112860892,
+          "mean_candidates_per_s1": 29.01474622770919,
+          "upper_bound_macro_f": 0.9697924596728162
+        },
+        "20": {
+          "n_candidate_pairs": 626332,
+          "pair_recall": 0.9437007874015748,
+          "mean_candidates_per_s1": 35.79858253315044,
+          "upper_bound_macro_f": 0.978870554580795
+        },
+        "30": {
+          "n_candidate_pairs": 738588,
+          "pair_recall": 0.9451443569553806,
+          "mean_candidates_per_s1": 42.21467764060357,
+          "upper_bound_macro_f": 0.9795255722812725
+        }
+      }
+    },
+    "us": {
+      "n_candidate_pairs": 1037458,
+      "pair_recall": 0.9855637709979016,
+      "mean_candidates_per_s1": 39.22039921367004,
+      "upper_bound_macro_f": 0.9956292337824003,
+      "reduction_ratio": 0.9999936607072404,
+      "max_candidates_per_s1": 77,
+      "pair_recall_S2": 0.9847246811021835,
+      "pair_recall_S3": 0.9863509571364691,
+      "at_cut": {
+        "1": {
+          "n_candidate_pairs": 55879,
+          "pair_recall": 0.4807242284747476,
+          "mean_candidates_per_s1": 2.1124678663239074,
+          "upper_bound_macro_f": 0.816848222074869
+        },
+        "2": {
+          "n_candidate_pairs": 110234,
+          "pair_recall": 0.7590446160776084,
+          "mean_candidates_per_s1": 4.167321941630123,
+          "upper_bound_macro_f": 0.9377492823852369
+        },
+        "3": {
+          "n_candidate_pairs": 165115,
+          "pair_recall": 0.8856198020237088,
+          "mean_candidates_per_s1": 6.242061091788901,
+          "upper_bound_macro_f": 0.9702649396661985
+        },
+        "5": {
+          "n_candidate_pairs": 275877,
+          "pair_recall": 0.9509563727052,
+          "mean_candidates_per_s1": 10.429343716921215,
+          "upper_bound_macro_f": 0.984905105368471
+        },
+        "10": {
+          "n_candidate_pairs": 554985,
+          "pair_recall": 0.9718746223398996,
+          "mean_candidates_per_s1": 20.980833207318916,
+          "upper_bound_macro_f": 0.991104607815726
+        },
+        "15": {
+          "n_candidate_pairs": 755782,
+          "pair_recall": 0.9802463167840388,
+          "mean_candidates_per_s1": 28.57182821714804,
+          "upper_bound_macro_f": 0.9937873992633898
+        },
+        "20": {
+          "n_candidate_pairs": 917148,
+          "pair_recall": 0.9849924742641808,
+          "mean_candidates_per_s1": 34.67216089520641,
+          "upper_bound_macro_f": 0.9953895583892269
+        },
+        "30": {
+          "n_candidate_pairs": 1037458,
+          "pair_recall": 0.9855637709979016,
+          "mean_candidates_per_s1": 39.22039921367004,
+          "upper_bound_macro_f": 0.9956292337824003
+        }
+      }
+    }
+  }
+}
+secs 1509.8
+{
+ "n_candidate_pairs": 1776046,
+ "pair_recall": 0.9693514320869056,
+ "mean_candidates_per_s1": 40.412441976881766,
+ "upper_bound_macro_f": 0.9892182557714844,
+ "reduction_ratio": 0.9999960841487979,
+ "max_candidates_per_s1": 77,
+ "pair_recall_S2": 0.970748400939745,
+ "pair_recall_S3": 0.9680383947717758,
+ "channels": {
+  "full_char": {
+   "pair_recall": 0.9478553240207658,
+   "only_this_recall": 0.04109066264862055,
+   "share_of_pairs": 0.6841320551382115
+  },
+  "addr_word": {
+   "pair_recall": 0.7930004408445792,
+   "only_this_recall": 0.008329988616998178,
+   "share_of_pairs": 0.2493769868573224
+  },
+  "key": {
+   "pair_recall": 0.6433304163020378,
+   "only_this_recall": 0.0022371217454813432,
+   "share_of_pairs": 0.15207714214609305
+  },
+  "crowd": {
+   "pair_recall": 0.5344023266066154,
+   "only_this_recall": 0.006145505030234043,
+   "share_of_pairs": 0.1968389332258286
+  }
+ }
+}
+cut {1: (0.4639, 0.803, 2.1), 2: (0.7332, 0.9238, 4.1), 3: (0.8559, 0.9565, 6.2), 5: (0.9211, 0.9721, 10.4), 10: (0.9453, 0.9801, 20.8), 15: (0.957, 0.9842, 28.7), 20: (0.9684, 0.9888, 35.1), 30: (0.9694, 0.9892, 40.4)}
+india {'pair_recall': 0.9451, 'upper_bound_macro_f': 0.9795, 'mean_candidates_per_s1': 42.2147}
+us {'pair_recall': 0.9856, 'upper_bound_macro_f': 0.9956, 'mean_candidates_per_s1': 39.2204}
+     1511.27 real      4648.48 user        49.96 sys
+          8938815488  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+            12828508  page reclaims
+                 401  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+               96816  voluntary context switches
+             1513332  involuntary context switches
+      18536351194078  instructions retired
+      12109485146113  cycles elapsed
+         17888441976  peak memory footprint
