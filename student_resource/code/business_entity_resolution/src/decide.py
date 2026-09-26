@@ -187,6 +187,10 @@ def run(cfg: dict, split: str = "dev") -> dict:
                 var = v
         for c in cs:                             # downstream analyses read dev_{c}.parquet
             pd.read_parquet(os.path.join(pdir, files[var].format(c))).to_parquet(os.path.join(pdir, f"dev_{c}.parquet"), index=False)
+        ids = np.concatenate([pd.read_parquet(os.path.join(block_dir(cfg), f"dev_{c}_q.parquet"), columns=["entity_id"])
+                              ["entity_id"].to_numpy() for c in cs])
+        pd.DataFrame({"entity_id": ids, **{f"f05_{v}": f[0][f[1]].astype(np.float32) for v, f in fits.items()}}).to_parquet(
+            os.path.join(cfg["paths"]["runs"], "entity_f05_dev.parquet"), index=False)   # paired comparisons across runs
         F, chosen, info, payload, nt, ctry = fits[var]
         info["variant_gains"] = {v: fits[v][2][k] for v in variants[1:] for k in fits[v][2] if k.startswith("gain_vs_")}
         info["stack_variant"] = var

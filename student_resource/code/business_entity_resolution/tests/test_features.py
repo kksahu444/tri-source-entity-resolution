@@ -37,6 +37,7 @@ def test_features_smoke():
     assert len(f) == 2 and np.isfinite(f.to_numpy()).all()
     assert f["sup_name"].tolist() == [0, 0] and f["sup_house"].tolist() == [0, 0]
     assert f["cmp_sub"].tolist() == [1, 0] and f["house_reldiff"].tolist() == [0, -1]
+    assert f["house_off"].tolist() == [0, 1e6] and f["q_n_exact_house"].tolist() == [1, 1]
     # the two candidates are each other's anchor, so both see the same similarity
     assert f["anc_name_sim"].iloc[0] == f["anc_name_sim"].iloc[1] > 0.8
     f0 = full_features(q, r, pairs, ch)

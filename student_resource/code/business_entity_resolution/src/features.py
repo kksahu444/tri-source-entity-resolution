@@ -257,7 +257,8 @@ def gen_features(f: pd.DataFrame, q, r, qi, ri) -> None:
     """Generic features aimed at observed noise mechanisms (no dataset-specific word lists):
     website-style names (space-free containment), house numbers with dropped/changed digits or ranges,
     and agreement with the S1's best other candidate (anchor), a non-chaining consistency check."""
-    cols = {k: [] for k in ("cmp_sub", "cmp_partial", "house_sub", "house_reldiff", "house_in_rnums", "house_lev")}
+    cols = {k: [] for k in ("cmp_sub", "cmp_partial", "house_sub", "house_reldiff", "house_in_rnums", "house_lev",
+                            "house_off")}
     for s in range(0, len(qi), CHUNK):
         a, b = qi[s:s + CHUNK], ri[s:s + CHUNK]
         cq = np.array([x.replace(" ", "") for x in _col(q, "core", a)], dtype=object)
@@ -275,11 +276,18 @@ def gen_features(f: pd.DataFrame, q, r, qi, ri) -> None:
         with np.errstate(invalid="ignore", divide="ignore"):
             rel = np.abs(nq - nr_) / np.maximum(np.maximum(nq, nr_), 1)
         cols["house_reldiff"].append(np.where(np.isnan(rel), -1, rel).astype(F32))
+        # signed offset (record - S1): test decoy entities sit at +1..+21 (97% positive), while house noise on
+        # true records drops or swaps digits (runs/decoy_shift.md)
+        off = np.clip(nr_ - nq, -1e5, 1e5)
+        cols["house_off"].append(np.where(np.isnan(off), 1e6, off).astype(F32))      # 1e6 = a house number missing
         rn = _col(r, "nums", b)
         cols["house_in_rnums"].append(np.fromiter((bool(x) and x in set(y.split()) for x, y in zip(hq, rn)),
                                                   bool, len(hq)).astype(F32))
     for k, v in cols.items():
         f[k] = np.concatenate(v) if v else np.zeros(0, F32)
+    # how many candidates of the S1 sit at its exact house number (a decoy entity sits beside them)
+    exact = (f["house_lev"].to_numpy() == 0).astype(float)
+    f["q_n_exact_house"] = np.bincount(qi, weights=exact, minlength=int(qi.max()) + 1 if len(qi) else 0)[qi].astype(F32)
     # anchor agreement: the S1's best other candidate by blocking score
     c1 = f["c1_score"].to_numpy()
     order = np.lexsort((-c1, qi))
