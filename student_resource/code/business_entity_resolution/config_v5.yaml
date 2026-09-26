@@ -1,0 +1,42 @@
+seed: 2026
+paths:                               # relative to code/business_entity_resolution/
+  dataset: ../../dataset
+  artifacts: ../../artifacts
+  runs: ../../runs
+  output: ../../output
+  submissions: ../../submissions
+flags:
+  ALLOW_TEST_PRED_FIT: false         # Q2
+  ALLOW_LIBPOSTAL: false             # Q1
+  ALLOW_HANDWRITTEN_LISTS: false     # Q3
+  ALLOW_LLM_AUGMENTATION: false      # Q4, keep false
+  USE_MMBERT_IN_FINAL: false         # Q6
+  COUNTRY_BLOCKING: true             # D0 block 6: 0 cross-country pairs of 7,638,365
+  HARD_ASSIGNMENT: true              # D0 block 7: 0 records matched to 2+ S1
+  TRANSLITERATE: true                # anyascii (ISC) romanisation of Indic scripts; see README open questions
+normalize:
+  legal_min_share: 0.01              # legal-form tokens: share of S1 names ending with the token (per country)
+  region_min_share: 0.0005           # S1 last address parts kept as regions
+  workers: 10
+  norm_dir: norm_tl                  # iteration 2: mined transliteration dictionary applied
+dev:
+  city_group_share: 0.30             # share of (country, city) groups in the dev universe
+  orphan_share: 0.19                 # D0 block 2: dev S1 dropped from the queries, records kept as distractors
+blocking: {k_tfidf: 30, k_bm25: 30, k_dense: 30, crowd_cap: 10, key_block_cap: 200, key_keep: 10, query_chunk: 100000,
+           c1_generate: 100, rare_df_min: 20000, rare_df_share: 0.005, key_rare_token: true,
+           reverse_empty: {enabled: true, k: 25, forward_k: 5, min_cos: 0.3}, second_hop: {enabled: false},
+           address_only: {enabled: true, k: 8, min_cos: 0.6, generate: 50}}   # C1 rare-feature generation; C5a key uses the rarest street token
+prune: {pc_tolerance: 0.005, reverse_keep: 3}
+features: {support: true, gen: true, consistency: true}   # iteration 3: + generator-aware, anchor agreement, consistency (features only)
+cross_encoder: {enabled: true, band_lo: 0.005, band_hi: 0.995, confident_share: 0.02}   # T6: bake-off mDeBERTa-v3-base vs XLM-R-base, 1 epoch
+decision: {rule: two_threshold, max_m: 30}   # later gfm_count or gfm_indep, whichever wins out-of-fold
+france: {offset: loco_prior}                 # distribution_matching | em only if ALLOW_TEST_PRED_FIT
+
+stack_b: true                        # iteration 2: stage-B context stacking on stage-A probabilities
+# iteration 3: C7 reverse name channel for empty-address records (error analysis: 59% of blocking loss);
+# C6 second-hop off (measured: recovers ~5% of misses for ~4 extra candidates per S1)
+stack_b_test_context: per_fold      # work order T2: stage-B test context from each stage-A fold model; no full-data refit
+# iteration 4: C7 top-25 (was 10); C8 address-only retrieval (T4 error budget: "name replaced" = 26-27% of
+# blocking misses); cross-encoder logit as a stage-B feature, kept only if the paired bootstrap on dev says so
+# final run (config_v5) = v4 + C7 forward pass (each S1 takes its top-5 empty-address records; measured on a
+# test-sized pool in runs/c7_scale.md: reverse-only PC on blank-address targets 0.90 dev -> 0.77 test size, 0.90 with forward)
