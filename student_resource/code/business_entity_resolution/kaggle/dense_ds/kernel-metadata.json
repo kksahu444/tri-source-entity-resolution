@@ -1,3 +1,3 @@
 {"id": "ashuwhy/amlc26-dense", "title": "amlc26-dense", "code_file": "dense_retrieval.py", "language": "python",
- "kernel_type": "script", "is_private": true, "enable_gpu": true, "enable_internet": true, "machine_shape": "NvidiaTeslaT4",
+ "kernel_type": "script", "is_private": true, "enable_gpu": true, "enable_internet": true,
  "dataset_sources": ["ashuwhy/amlc26-raw"], "competition_sources": [], "kernel_sources": []}

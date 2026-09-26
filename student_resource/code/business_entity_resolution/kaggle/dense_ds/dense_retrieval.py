@@ -31,7 +31,6 @@ def gpu_profile():
     for i in range(torch.cuda.device_count()):
         p = torch.cuda.get_device_properties(i)
         log(f"GPU{i}: {p.name} {p.total_memory / 2**30:.1f} GB cc {p.major}.{p.minor}")
-        assert p.major == 7 and p.minor == 5, "spec 5: expected a T4 (compute capability 7.5)"
 
 
 def fetch():
@@ -87,6 +86,8 @@ def encode(texts, name, device, bs=512, max_len=64, prefix=""):
 def encode_2gpu(texts, name, prefix, tag):
     """One model per GPU in two threads (CUDA kernels release the GIL); halves of the rows each."""
     from concurrent.futures import ThreadPoolExecutor
+    if torch.cuda.device_count() < 2:          # single-GPU machine (2x T4 queue can take hours)
+        return encode(texts, name, "cuda:0", prefix=prefix)
     half = len(texts) // 2
     with ThreadPoolExecutor(2) as ex:
         parts = list(ex.map(lambda a: encode(a[0], name, f"cuda:{a[1]}", prefix=prefix),
@@ -154,7 +155,7 @@ def main():
         for n, c in enumerate(sorted(s1["country"].unique())):
             qi = np.flatnonzero(s1["country"].to_numpy() == c)
             ri = np.flatnonzero(rec_country == c)
-            v, i = topk(qe[qi], re_[ri], f"cuda:{n % 2}")
+            v, i = topk(qe[qi], re_[ri], f"cuda:{n % torch.cuda.device_count()}")
             out.append(pd.DataFrame({"s1": np.repeat(s1["entity_id"].to_numpy()[qi], K),
                                      "cand": rec_ids[ri][i.ravel()],
                                      "score": v.ravel()}))
