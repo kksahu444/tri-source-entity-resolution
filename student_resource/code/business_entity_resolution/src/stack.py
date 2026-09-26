@@ -92,11 +92,22 @@ def run(cfg: dict, split: str = "dev") -> dict:
         info = {}
         for c in cs:
             df = pd.read_parquet(os.path.join(fd, f"test_{c}.parquet"))
+            qi_t, ri_t = df["qi"].to_numpy(), df["ri"].to_numpy()
             X = df[st["cols"]].to_numpy(np.float32)
-            p = predict_test(st, X)
-            out = pd.DataFrame({"qi": df["qi"], "ri": df["ri"], "p": p.astype(np.float32)})
+            del df
+            if st.get("full_model") is not None:
+                p, per_fold = predict_test(st, X), None
+            else:
+                # keep every fold model's prediction: stage B's test context is built per fold (T2)
+                per_fold = np.stack([gbm.predict(m, X) for m in st["models"]], axis=1).astype(np.float32)
+                p = per_fold.mean(axis=1)
+            out = pd.DataFrame({"qi": qi_t, "ri": ri_t, "p": p.astype(np.float32)})
             out.to_parquet(os.path.join(pd_, f"test_{c}.parquet"), index=False)
             out.to_parquet(os.path.join(pd_, f"test_{c}_stageA.parquet"), index=False)
-            info[c] = len(df)
-            log.info("stage A test %s: %s pairs (%.0fs)", c, f"{len(df):,}", t())
+            if per_fold is not None:
+                pd.DataFrame(per_fold, columns=[f"p{f}" for f in range(per_fold.shape[1])]).to_parquet(
+                    os.path.join(pd_, f"test_{c}_stageA_folds.parquet"), index=False)
+            del X
+            info[c] = len(qi_t)
+            log.info("stage A test %s: %s pairs (%.0fs)", c, f"{len(qi_t):,}", t())
     return {"stage": "stack", "runtime_s": t(), "notes": json.dumps(info)}
