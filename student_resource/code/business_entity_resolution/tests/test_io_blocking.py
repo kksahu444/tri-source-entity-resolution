@@ -89,6 +89,28 @@ def test_reverse_name_channel():
     assert all((qi[ri == j]).size <= 3 for j in (0, 1, 2))
 
 
+
+def test_c7_forward_pass_survives_query_competition():
+    from src.blocking.union import block_country
+    n = 60
+    r = pd.DataFrame({"entity_id": [f"S2-{i}" for i in range(n + 2)],
+                      "core": [f"vendor{i:03d} mart" for i in range(n)] + ["zylofonic traderz"] * 2,
+                      "addr_core": [f"{i} lane{i % 7} pune" for i in range(n)] + ["", ""],
+                      "house": [str(i) for i in range(n)] + ["", ""], "street": [f"lane{i % 7}" for i in range(n)] + ["", ""],
+                      "city": ["pune"] * n + ["", ""], "src": np.int8(2)})
+    # query 0 copies the records' name exactly and takes each record's single reverse slot from query 1
+    q = pd.DataFrame({"entity_id": ["S1-0", "S1-1"], "core": ["zylofonic traderz", "zylophonic traders"],
+                      "addr_core": ["4 mg road pune", "12 mg road pune"], "house": ["4", "12"], "street": ["mg", "mg"],
+                      "city": ["pune", "pune"], "src": np.int8(1)})
+    bc = {"k_tfidf": 30, "crowd_cap": 10, "key_block_cap": 200, "key_keep": 10, "query_chunk": 100, "c1_generate": 100,
+          "reverse_empty": {"enabled": True, "k": 1, "min_cos": 0.3}}
+    c7 = lambda p: set(zip(p.loc[p["in_c7"] == 1, "qi"], p.loc[p["in_c7"] == 1, "ri"]))
+    pairs, _ = block_country({"blocking": bc}, q, r)
+    assert c7(pairs) == {(0, n), (0, n + 1)}
+    bc["reverse_empty"]["forward_k"] = 2
+    pairs, _ = block_country({"blocking": bc}, q, r)
+    assert {(1, n), (1, n + 1)} <= c7(pairs)
+
 def test_crowd_and_key_channels():
     qk = pd.Series(["a b", "c", ""])
     rk = pd.Series(["a b"] * 3 + ["c"] * 12 + [""])
