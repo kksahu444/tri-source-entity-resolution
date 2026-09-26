@@ -3,7 +3,7 @@
 Handoff for teammates and for any fresh Claude/Codex session after a context reset. Read this
 first, then `CLAUDE.md`. Update the "State" and "Open items" sections before you stop working.
 
-Last updated: 26 Sep 2026, 14:25 IST, by Ashutosh (blocking lane).
+Last updated: 26 Sep 2026, 18:10 IST, by Ashutosh (blocking lane).
 
 Git rule: work on your own branch, commit small and often, push the branch. Before anything goes to
 `main`, merge `origin/main` into the branch and run both test suites (repo root and
@@ -27,6 +27,7 @@ reviewed branch, never pushed into his running chain.
 | Aditya blocking v2 union | PC US 0.974, India 0.964 at ~36 cands/S1 | PROGRESS_REPORT |
 | After learned pruner (N=8 + reverse 3) | ~15-20 cands/S1, PC almost unchanged | PROGRESS_REPORT |
 | Where the loss is | ~0.013 in blocking+pruning, ~0.015 in decisions | PROGRESS_REPORT oracle bounds |
+| Cross-encoder (xlm-roberta-base, 1 epoch on 681k out-of-dev pairs, Kaggle `ashuwhy/amlc26-ce`) | held-out 4,956 S1: pair AUC 0.9994; CE alone + one threshold, macro F0.5 India 0.981, US 0.974 (blocking ceiling 0.987 / 0.991) | `ce_report.json`, kernel v1 |
 | My blocking-v2, 2% train sample | recall 97.43%, UB macro F 0.991, 46.4 cands/S1, 745 s, 8.9 GB peak | `runs/block_s002_v2.txt` |
 | My blocking-v2 by country | India 95.58% @ 50.3/S1, US 98.67% @ 43.8/S1 | same |
 | My cut curve (per source cap) | 10: 95.72% @ 20.8; 15: 96.41% @ 28.5; 20: 96.78% @ 35.7; 30: 97.43% @ 46.4 | same |
@@ -102,6 +103,8 @@ Interfaces, so nobody blocks on anybody:
 | 4 | Iteration 3 chain | Aditya | queued behind iteration 2 |
 | 5 | C7 forward pass, measured at test-sized pool | Ashutosh | on main, off by default |
 | 5b | Set `reverse_empty.forward_k: 5` for the next test run | Aditya (his config) | open |
+| 5c | Export iteration-3 dev and test pairs for the cross-encoder (`python -m src.ce_export --split dev`, then `--split test`); test scoring takes ~5 h so it must start tonight | Aditya runs the export, I score | open |
+| 5d | Dense channel on Kaggle `ashuwhy/amlc26-dense` (Aditya's kernel, data from private dataset `ashuwhy/amlc26-raw`) | Ashutosh | running |
 | 6 | Methodology doc (`docs_draft/Documentation_draft.md` in his tree): compliance section with decisions 1, 5, 6 | Krishnkant (proposed) | open |
 | 7 | Final zip via `python -m src.package --team <TEAM>`, README check on a small slice | Krishnkant (proposed) | 27 Sep |
 | 7b | Ablation tables (`python -m src.ablate`) | 4th teammate (proposed) | 27 Sep |
