@@ -5,10 +5,10 @@ import json
 import os
 import pickle
 
-import lightgbm as lgb
 import numpy as np
 import pandas as pd
 
+from . import gbm
 from .featurize import countries, feat_dir
 from .utils import Timer, get_logger
 
@@ -27,7 +27,7 @@ def train_full(cfg, X, y, iters, t=None):
     if cfg.get("stack", {}).get("test_models", "folds") != "full":
         return None
     rounds = int(1.1 * np.mean(iters))
-    m = lgb.train({**PARAMS, "seed": cfg["seed"]}, lgb.Dataset(X, y), rounds)
+    m = gbm.train_binary(cfg, X, y, rounds, seed=cfg["seed"], lgb_params=PARAMS)
     if t is not None:
         log.info("full model: %d rounds (%.0fs)", rounds, t())
     return m
@@ -35,8 +35,8 @@ def train_full(cfg, X, y, iters, t=None):
 
 def predict_test(st: dict, X: np.ndarray) -> np.ndarray:
     if st.get("full_model") is not None:
-        return st["full_model"].predict(X)
-    return np.mean([m.predict(X, num_iteration=m.best_iteration) for m in st["models"]], axis=0)
+        return gbm.predict(st["full_model"], X)
+    return np.mean([gbm.predict(m, X) for m in st["models"]], axis=0)
 
 
 def pred_dir(cfg):
@@ -66,19 +66,16 @@ def run(cfg: dict, split: str = "dev") -> dict:
         es_mask = np.isin(s1_key, list(es_s1))
         oof = np.zeros(len(df), np.float32)
         models, iters = [], []
-        params = {**PARAMS, "seed": cfg["seed"]}
         for f in range(5):
             tr = (fold != f) & ~es_mask
             es = (fold != f) & es_mask
-            m = lgb.train(params, lgb.Dataset(X[tr], y[tr]), MAX_ROUNDS,
-                          valid_sets=[lgb.Dataset(X[es], y[es])],
-                          callbacks=[lgb.early_stopping(EARLY, verbose=False)])
+            m = gbm.train_binary(cfg, X[tr], y[tr], MAX_ROUNDS, X[es], y[es], EARLY, cfg["seed"], PARAMS)
             va = fold == f
-            oof[va] = m.predict(X[va], num_iteration=m.best_iteration)
+            oof[va] = m.predict(X[va])
             models.append(m)
             iters.append(m.best_iteration)
             log.info("stage A fold %d: best_iter %d (%.0fs)", f, m.best_iteration, t())
-        imp = pd.Series(np.mean([m.feature_importance("gain") for m in models], axis=0), index=cols)
+        imp = pd.Series(np.mean([m.importance(len(cols)) for m in models], axis=0), index=cols)
         imp = (imp / imp.sum()).sort_values(ascending=False)
         full = train_full(cfg, X, y, iters, t)
         pickle.dump({"models": models, "cols": cols, "iters": iters, "full_model": full}, open(model_path, "wb"))

@@ -11,13 +11,13 @@ import json
 import os
 import pickle
 
-import lightgbm as lgb
 import numpy as np
 import pandas as pd
 
 from .blocking.union import block_dir
 from .featurize import countries, feat_dir
 from .features import _group_stats
+from . import gbm
 from .stack import MAX_ROUNDS, EARLY, META, PARAMS, pred_dir, predict_test, train_full
 from .utils import Timer, get_logger
 
@@ -109,9 +109,8 @@ def run(cfg: dict, split: str = "dev") -> dict:
         models = []
         for f in range(5):
             tr, es = (fold != f) & ~es_mask, (fold != f) & es_mask
-            m = lgb.train({**PARAMS, "seed": cfg["seed"]}, lgb.Dataset(X[tr], y[tr]), MAX_ROUNDS,
-                          valid_sets=[lgb.Dataset(X[es], y[es])], callbacks=[lgb.early_stopping(EARLY, verbose=False)])
-            oof[fold == f] = m.predict(X[fold == f], num_iteration=m.best_iteration)
+            m = gbm.train_binary(cfg, X[tr], y[tr], MAX_ROUNDS, X[es], y[es], EARLY, cfg["seed"], PARAMS)
+            oof[fold == f] = m.predict(X[fold == f])
             models.append(m)
             log.info("stage B fold %d: best_iter %d (%.0fs)", f, m.best_iteration, t())
         full = train_full(cfg, X, y, [m.best_iteration for m in models], t)
@@ -120,7 +119,7 @@ def run(cfg: dict, split: str = "dev") -> dict:
             m = df["_c"].to_numpy() == c
             pd.DataFrame({"qi": df["qi"][m], "ri": df["ri"][m], "y": df["y"][m], "p": oof[m]}).to_parquet(
                 os.path.join(pdir, f"dev_{c}.parquet"), index=False)
-        imp = pd.Series(np.mean([m.feature_importance("gain") for m in models], axis=0), index=cols)
+        imp = pd.Series(np.mean([m.importance(len(cols)) for m in models], axis=0), index=cols)
         info = {"iters": [m.best_iteration for m in models],
                 "top_features": (imp / imp.sum()).sort_values(ascending=False).head(15).round(4).to_dict()}
     else:

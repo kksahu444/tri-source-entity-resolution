@@ -84,7 +84,7 @@ def run(cfg: dict, split: str = "dev") -> dict:
         cols = list(X.columns)
         y = np.concatenate([ys[c] for c in cs])
         fold = np.concatenate([folds[c] for c in cs])
-        oof, models = prune.train_oof(X.to_numpy(np.float32), y, fold, cfg["seed"])
+        oof, models = prune.train_oof(X.to_numpy(np.float32), y, fold, cfg["seed"], cfg=cfg)
         del X
         off, ns = 0, {}
         for c in cs:
