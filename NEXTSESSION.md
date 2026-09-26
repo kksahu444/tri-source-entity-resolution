@@ -3,7 +3,7 @@
 Handoff for teammates and for any fresh Claude/Codex session after a context reset. Read this
 first, then `CLAUDE.md`. Update the "State" and "Open items" sections before you stop working.
 
-Last updated: 26 Sep 2026, 14:15 IST, by Ashutosh (blocking lane).
+Last updated: 26 Sep 2026, 14:25 IST, by Ashutosh (blocking lane).
 
 Git rule: work on your own branch, commit small and often, push the branch. Before anything goes to
 `main`, merge `origin/main` into the branch and run both test suites (repo root and
@@ -71,18 +71,40 @@ all-dev model for test; C7 on, C6 off as of 771695b).
    My legal-typo rules are not ported: the translit dictionary already maps `limitet`, `praibhet`,
    `elelpi`, `li`, `pra` to ltd/pvt/llp.
 
+## Lanes (proposed 26 Sep 14:25, confirm in team chat)
+
+One owner per lane, and one owner per file. If you need a change in someone else's files, ask them in
+chat or open a branch for them to review; do not edit their files on main. Numbers behind the split are in
+`student_resource/RESEARCH_PLAN.md` section 1: of the 0.021 we still lose, 0.0095 is blocking, 0.0068 model
+misses, 0.0047 false links.
+
+| Lane | Owner | Owns (files) | Delivers | Deadline |
+|---|---|---|---|---|
+| Pipeline core and runs | Aditya | `student_resource/code/business_entity_resolution/` except `src/blocking/` channels below and `kaggle/ce_*`; all `config_v*.yaml`; `runs/iter*_chain.sh`; `submissions/manifest.csv` | iteration 3 and the final run, every upload, OOF per run | final run starts 27 Sep 06:00 |
+| Retrieval and GPU models | Ashutosh | new channels in `src/blocking/` (C7 forward is on main), dense channel, cross-encoder under `kaggle/ce_*` on my own Kaggle account, `src/analysis_c7_scale.py`, the `main.py` testbed | (a) dense candidates and (b) a cross-encoder score, each as a parquet keyed `s1_id, cand_id` that the stack reads as one extra column | dev file by 27 Sep 06:00; cut-off 10:00, else we ship without it |
+| Release and compliance | Krishnkant | `docs_draft/` -> final methodology doc, `LICENSES.md` check, `docs/EXPERIMENTS.md`, tags `sub/d<day>-<n>`, the packaging dry run, README check on a small slice, organiser Q&A sheet | a zip that passes the official validator, methodology with the compliance section (decisions 1, 5, 6) | zip checked by 27 Sep 21:00 |
+| Decisions and error analysis | 4th teammate (name?) | `src/ablate.py` outputs, `src/error_analysis.py` outputs, France/LOCO write-up | ablation tables and the loss decomposition on the iteration-3 run, for the methodology doc | 27 Sep 12:00 |
+
+Interfaces, so nobody blocks on anybody:
+- Aditya exports the pruned dev and test pairs of the current run (`s1_id, cand_id`, plus the stage-B `p` for
+  dev) as parquet; I score them on Kaggle and hand back `s1_id, cand_id, ce_p`. He adds one feature column.
+  The cross-encoder only scores the uncertain band (0.05 < p < 0.95 on stage B), which keeps it inside a T4 budget.
+- Config values (for example `reverse_empty.forward_k: 5`) are set by Aditya. Others propose them with a number.
+- Anyone who runs something records it under their own name in `EXPERIMENTS.md` and the manifest.
+
 ## Open items
 
 | # | Item | Owner | Status |
 |---|---|---|---|
-| 1 | Add Kaggle secret `GITHUB_TOKEN` (read on release `dataset-v1`) to notebook `aditya103856/amlc26-dense` and attach it | Aditya (owns the Kaggle notebook) | open; 2-minute manual step, unblocks dense channel |
+| 1 | Kaggle GPU for the dense channel and cross-encoder | Ashutosh (own Kaggle account and secret, so it no longer waits on Aditya's notebook) | proposed |
 | 2 | Log upload 1 public score (0.960) against run `0926-073916-submit` in `student_resource/submissions/manifest.csv` | Aditya | open |
 | 3 | Iteration 2 test file, upload 2, log OOF + LB | Aditya | running |
 | 4 | Iteration 3 chain | Aditya | queued behind iteration 2 |
 | 5 | C7 forward pass, measured at test-sized pool | Ashutosh | on main, off by default |
 | 5b | Set `reverse_empty.forward_k: 5` for the next test run | Aditya (his config) | open |
-| 6 | Methodology doc (`docs_draft/Documentation_draft.md` in his tree): compliance section with decisions 1, 5, 6 | unassigned | open |
-| 7 | Final zip via `python -m src.package --team <TEAM>`, README check on a small slice, ablation tables (`python -m src.ablate`) | unassigned | 27 Sep |
+| 6 | Methodology doc (`docs_draft/Documentation_draft.md` in his tree): compliance section with decisions 1, 5, 6 | Krishnkant (proposed) | open |
+| 7 | Final zip via `python -m src.package --team <TEAM>`, README check on a small slice | Krishnkant (proposed) | 27 Sep |
+| 7b | Ablation tables (`python -m src.ablate`) | 4th teammate (proposed) | 27 Sep |
 | 8 | Zip deleted in 4ee3179 | Ashutosh | restored on blocking-v2 (ae8b38a) |
 
 ## My branch (`blocking-v2`)
