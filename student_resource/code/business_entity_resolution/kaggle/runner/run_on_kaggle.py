@@ -104,6 +104,10 @@ def main():
         for mod in ("src.error_analysis", "src.transfer"):
             cmd = f"cd {code} && {sys.executable} -u -m {mod} --config config_kaggle.yaml --tag {tag} 2>&1 | tee -a {W}/runs/analysis.log"
             subprocess.run(["bash", "-c", cmd], env=env)
+        # acceptance check (runs/decoy_shift.md): near-house decoy links vs train truth; result in runs/acceptance.jsonl
+        cmd = (f"cd {code} && {sys.executable} -u -m src.acceptance --config config_kaggle.yaml "
+               f"--file {W}/output/matching_results.tsv 2>&1 | tee -a {W}/runs/analysis.log")
+        subprocess.run(["bash", "-c", cmd], env=env)
 
     # checkpoint small artifacts (models, vocabularies, decisions) for resumes and download
     ck = f"{W}/ckpt/artifacts"
