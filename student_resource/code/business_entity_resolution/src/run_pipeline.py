@@ -34,15 +34,22 @@ def main(argv=None) -> int:
     seed_everything(cfg["seed"])
     log = get_logger()
     log.info("config %s flags %s", cfg["_hash"], json.dumps(cfg["flags"]))
-    for stage in (ORDER if args.stage == "all" else [args.stage]):
+    if args.stage == "all":
+        use_b = cfg.get("stack_b", False)
+        model = ["block", "features", "stack"] + (["stackb"] if use_b else []) + ["decide"]
+        plan = [("prep", None)] + ([("translit", None)] if cfg["normalize"].get("norm_dir") == "norm_tl" else [])
+        plan += [(s, "dev") for s in model] + [(s, "test") for s in model] + [("submit", "test")]
+    else:
+        plan = [(args.stage, args.split)]
+    for stage, split in plan:
         run_id = new_run_id(stage)
         mod = importlib.import_module(STAGES[stage])
-        kwargs = {"split": args.split} if args.split else {}
+        kwargs = {"split": split} if split else {}
         if args.frac:
             kwargs["frac"] = args.frac
         res = mod.run(cfg, **kwargs) or {}
         res.setdefault("stage", stage)
-        slice_ = (args.split or "all") + (f":{args.tag}" if args.tag else "")
+        slice_ = (split or "all") + (f":{args.tag}" if args.tag else "")
         append_run_log(cfg, {"run_id": run_id, "data_slice": slice_, **res})
         log.info("stage %s done: %s", stage, {k: v for k, v in res.items() if k != "notes"})
     return 0
