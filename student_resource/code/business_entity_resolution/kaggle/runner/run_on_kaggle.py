@@ -14,7 +14,7 @@ import time
 import zipfile
 
 IN, TMP, W = "/kaggle/input", "/kaggle/tmp", "/kaggle/working"
-CONFIG = os.environ.get("ER_CONFIG", "config_v3.yaml")
+CONFIG = os.environ.get("ER_CONFIG", "config_v4.yaml")
 STAGE = os.environ.get("ER_STAGE", "all")
 
 
@@ -37,7 +37,7 @@ def main():
     gpu = shutil.which("nvidia-smi") is not None and sh("nvidia-smi --query-gpu=name,memory.total --format=csv",
                                                            check=False).returncode == 0
     # packages the Kaggle image may lack (pure wheels; numpy/pandas/pyarrow/sklearn/lightgbm/xgboost come with it)
-    sh(f"{sys.executable} -m pip install -q rapidfuzz sparse_dot_topn anyascii pyyaml", check=False)
+    sh(f"{sys.executable} -m pip install -q rapidfuzz sparse_dot_topn anyascii pyyaml sentencepiece protobuf", check=False)
     try:
         import numba  # noqa: F401
     except ImportError:
@@ -105,7 +105,8 @@ def main():
     # checkpoint small artifacts (models, vocabularies, decisions) for resumes and download
     ck = f"{W}/ckpt/artifacts"
     os.makedirs(ck, exist_ok=True)
-    for pat in ("vocab.json", "dev_universe.parquet", "decision.pkl", "translit_dict.json", "feat/*.pkl"):
+    for pat in ("vocab.json", "dev_universe.parquet", "decision.pkl", "translit_dict.json", "feat/*.pkl",
+                "ce/summary.json", "ce/*_logits.parquet", "ce/FAILED", "ce/*_f?.json"):
         for f in glob.glob(f"{TMP}/artifacts/{pat}"):
             dst = os.path.join(ck, os.path.relpath(f, f"{TMP}/artifacts"))
             os.makedirs(os.path.dirname(dst), exist_ok=True)

@@ -10,6 +10,9 @@ so its out-of-fold output never saw its own labels. Test (config stack_b_test_co
 Optional consistency features (config features.consistency): a candidate's probability-weighted max and
 mean name/address similarity to the S1's other top candidates, and a flag for "no name overlap but the
 address matches the S1 and a confident sibling". They are features only: nothing is chained.
+Cross-encoder (work order T6): when stage `ce` produced out-of-fold logits, stage B is trained twice on
+the same folds, without and with the logit as one extra feature (NaN outside the band). `decide` compares
+the two on the same dev entities (paired bootstrap) and records the variant; the test pass uses it.
 The result replaces the probability file consumed by `decide`.
 """
 from __future__ import annotations
@@ -25,9 +28,10 @@ from rapidfuzz import fuzz
 
 from . import gbm
 from .blocking.union import block_dir
+from .cross_encoder import ce_logits, stack_variant
 from .featurize import countries, feat_dir
 from .features import _col, _group_stats, _sim
-from .stack import MAX_ROUNDS, EARLY, META, PARAMS, pred_dir, predict_test, train_full
+from .stack import MAX_ROUNDS, EARLY, META, PARAMS, pred_dir, predict_test
 from .utils import Timer, get_logger
 
 log = get_logger()
@@ -161,6 +165,31 @@ def _load(cfg, split, c):
     return df, pa, keys, cons
 
 
+CE_COL = "ce_logit"
+
+
+def ce_feature(cfg, split, c, qi, ri) -> np.ndarray:
+    """Cross-encoder logit per (qi, ri) pair; NaN for pairs outside the band."""
+    lg = ce_logits(cfg, split, c)
+    if lg is None:
+        raise FileNotFoundError(f"no cross-encoder logits for {split} {c}")
+    out = np.full(len(qi), np.nan, np.float32)
+    if len(lg) == 0 or len(qi) == 0:
+        return out
+    n_r = np.int64(max(int(ri.max()), int(lg["ri"].max())) + 1)
+    key = qi.astype(np.int64) * n_r + ri
+    lk = lg["qi"].to_numpy(np.int64) * n_r + lg["ri"].to_numpy(np.int64)
+    order = np.argsort(key, kind="stable")
+    pos = np.minimum(np.searchsorted(key[order], lk), len(key) - 1)
+    hit = key[order][pos] == lk
+    out[order[pos[hit]]] = lg["logit"].to_numpy(np.float32)[hit]
+    return out
+
+
+def _model_path(fd, variant):
+    return os.path.join(fd, "stageB.pkl" if variant == "base" else f"stageB_{variant}.pkl")
+
+
 def _quantiles(x: np.ndarray) -> list:
     return [round(float(v), 4) for v in np.quantile(x, QUANTILES)] + [round(float(x.mean()), 4)]
 
@@ -168,18 +197,21 @@ def _quantiles(x: np.ndarray) -> list:
 def run(cfg: dict, split: str = "dev") -> dict:
     t = Timer()
     fd, pdir = feat_dir(cfg), pred_dir(cfg)
-    model_path = os.path.join(fd, "stageB.pkl")
     cs = countries(cfg, split)
     info = {}
     if split == "dev":
         Xs, ys, folds, qis, ris, cc = [], [], [], [], [], []
+        use_ce = all(ce_logits(cfg, "dev", c) is not None for c in cs)
         for i, c in enumerate(cs):
             df, pa, keys, cons = _load(cfg, split, c)
             ctx = context_features(df["qi"].to_numpy(), df["ri"].to_numpy(), pa, keys, cons, df)
             info[f"pa_quantiles_dev_{c}"] = _quantiles(pa)
             fcols = [k for k in df.columns if k not in META]
             cols = fcols + list(ctx.columns)
-            Xs.append(np.hstack([df[fcols].to_numpy(np.float32), ctx.to_numpy(np.float32)]))
+            parts = [df[fcols].to_numpy(np.float32), ctx.to_numpy(np.float32)]
+            if use_ce:
+                parts.append(ce_feature(cfg, "dev", c, df["qi"].to_numpy(), df["ri"].to_numpy())[:, None])
+            Xs.append(np.hstack(parts))
             ys.append(df["y"].to_numpy())
             folds.append(df["fold"].to_numpy())
             qis.append(df["qi"].to_numpy())
@@ -195,25 +227,36 @@ def run(cfg: dict, split: str = "dev") -> dict:
         s1_key = c_all.astype(np.int64) * 10_000_000 + qi_all
         uniq = np.unique(s1_key)
         es_mask = np.isin(s1_key, uniq[rng.random(len(uniq)) < 0.05])
-        oof = np.zeros(len(df), np.float32)
-        models = []
-        for f in range(5):
-            tr, es = (fold != f) & ~es_mask, (fold != f) & es_mask
-            m = gbm.train_binary(cfg, X[tr], y[tr], MAX_ROUNDS, X[es], y[es], EARLY, cfg["seed"], PARAMS)
-            oof[fold == f] = m.predict(X[fold == f])
-            models.append(m)
-            log.info("stage B fold %d: best_iter %d (%.0fs)", f, m.best_iteration, t())
-        full = train_full(cfg, X, y, [m.best_iteration for m in models], t)
-        pickle.dump({"models": models, "cols": cols, "full_model": full}, open(model_path, "wb"))
-        for c in cs:
-            m = df["_c"].to_numpy() == c
-            pd.DataFrame({"qi": df["qi"][m], "ri": df["ri"][m], "y": df["y"][m], "p": oof[m]}).to_parquet(
-                os.path.join(pdir, f"dev_{c}.parquet"), index=False)
-        imp = pd.Series(np.mean([m.importance(len(cols)) for m in models], axis=0), index=cols)
-        info.update({"iters": [m.best_iteration for m in models],
-                     "top_features": (imp / imp.sum()).sort_values(ascending=False).head(15).round(4).to_dict()})
+        variants = {"base": cols}
+        if use_ce:
+            variants["ce"] = cols + [CE_COL]
+            info["ce_band_share_dev"] = round(float(np.isfinite(X[:, -1]).mean()), 4)
+        for v, vcols in variants.items():
+            Xv = X[:, :len(vcols)]
+            oof = np.zeros(len(df), np.float32)
+            models = []
+            for f in range(5):
+                tr, es = (fold != f) & ~es_mask, (fold != f) & es_mask
+                m = gbm.train_binary(cfg, Xv[tr], y[tr], MAX_ROUNDS, Xv[es], y[es], EARLY, cfg["seed"], PARAMS)
+                oof[fold == f] = m.predict(Xv[fold == f])
+                models.append(m)
+                log.info("stage B %s fold %d: best_iter %d (%.0fs)", v, f, m.best_iteration, t())
+            pickle.dump({"models": models, "cols": vcols, "full_model": None}, open(_model_path(fd, v), "wb"))
+            for c in cs:
+                m = df["_c"].to_numpy() == c
+                out = pd.DataFrame({"qi": df["qi"][m], "ri": df["ri"][m], "y": df["y"][m], "p": oof[m]})
+                out.to_parquet(os.path.join(pdir, f"dev_{c}_{v}.parquet"), index=False)
+                if v == "base":
+                    out.to_parquet(os.path.join(pdir, f"dev_{c}.parquet"), index=False)
+            imp = pd.Series(np.mean([m.importance(len(vcols)) for m in models], axis=0), index=vcols)
+            key = "" if v == "base" else f"_{v}"
+            info.update({f"iters{key}": [m.best_iteration for m in models],
+                         f"top_features{key}": (imp / imp.sum()).sort_values(ascending=False).head(15).round(4).to_dict()})
+        info["variants"] = list(variants)
     else:
-        st = pickle.load(open(model_path, "rb"))
+        variant = stack_variant(cfg)
+        st = pickle.load(open(_model_path(fd, variant), "rb"))
+        info["variant"] = variant
         mode = cfg.get("stack_b_test_context", "average")
         for c in cs:
             df, pa, keys, cons = _load(cfg, split, c)
@@ -224,6 +267,9 @@ def run(cfg: dict, split: str = "dev") -> dict:
             X = np.empty((len(df), len(st["cols"])), np.float32)
             pos = {k: i for i, k in enumerate(st["cols"])}
             X[:, [pos[k] for k in fcols]] = df[fcols].to_numpy(np.float32)
+            if CE_COL in pos:
+                X[:, pos[CE_COL]] = ce_feature(cfg, split, c, qi, ri)
+                info[f"ce_band_share_test_{c}"] = round(float(np.isfinite(X[:, pos[CE_COL]]).mean()), 4)
 
             def fill_ctx(pa_x):
                 ctx = context_features(qi, ri, pa_x, keys, cons, df)

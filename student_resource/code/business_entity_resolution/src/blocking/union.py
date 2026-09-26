@@ -1,4 +1,5 @@
-"""Stage `block` (D2): union of C1 (TF-IDF), C2 (name crowd) and C5 (keys) per country.
+"""Stage `block` (D2): union of C1 (TF-IDF), C2 (name crowd), C5 (keys) and optional C6 (second hop),
+C7 (reverse name for empty-address records), C8 (address only) per country.
 
 Outputs per (split, country) in artifacts/block/:
   {split}_{country}_q.parquet      query S1 rows (normalised view), row order = qi
@@ -89,6 +90,21 @@ def reverse_name_channel(rec_idx: np.ndarray, rn, qn, k: int, min_cos: float, ch
     return ek.astype(np.int32), rec_idx[eq].astype(np.int32)
 
 
+def address_only_channel(qa, ra, k: int, min_cos: float, generate: int, cap: int, chunk: int):
+    """C8: each S1 retrieves its top-k records by address cosine alone (candidates generated on the
+    address features with df <= cap, then rescored exactly). Targets records whose name was replaced
+    (no shared name token): C1 caps their score at 0.5 and ranks them below name look-alikes.
+    Returns (qi, ri) int32 arrays."""
+    ra_t = ra.T.tocsr()
+    ra_t = sp.csr_matrix(sp.diags((np.diff(ra_t.indptr) <= cap).astype(np.float32)) @ ra_t)
+    ra_t.eliminate_zeros()
+    gq, gr, _ = topk(qa, ra_t, generate, threshold=0.0, chunk=chunk)
+    s = pair_cos(qa, ra, gq, gr)
+    keep = s >= min_cos
+    aq, ar, _ = _topn_per_q(gq[keep], gr[keep], s[keep], k)
+    return aq.astype(np.int32), ar.astype(np.int32)
+
+
 def record_key_codes(r: pd.DataFrame, names: list[str]) -> dict:
     """Exact record keys for C6: int code per record, -1 where a key part is empty."""
     core = r["core"].astype(str)
@@ -177,6 +193,13 @@ def block_country(cfg, q: pd.DataFrame, r: pd.DataFrame) -> tuple[pd.DataFrame, 
         info["t_c7"] = t()
         log.info("  C7: %s pairs from %s empty-address records (%.0fs)", f"{len(chans.get('c7', ([],))[0]):,}",
                  f"{len(emp):,}", t())
+    ad = bc.get("address_only") or {}
+    if ad.get("enabled", False):
+        # C8 (error budget T4: "name replaced" = 26-27% of blocking misses in both countries)
+        chans["c8"] = address_only_channel(qa, ra, ad.get("k", 8), ad.get("min_cos", 0.6), ad.get("generate", 50),
+                                           cap, bc["query_chunk"])
+        info["t_c8"] = t()
+        log.info("  C8: %s pairs (%.0fs)", f"{len(chans['c8'][0]):,}", t())
     sh = bc.get("second_hop") or {}
     if sh.get("enabled", False):
         # C6: expand from confident first-pass pairs through exact record keys (query expansion)

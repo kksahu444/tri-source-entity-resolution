@@ -49,7 +49,7 @@ def worker(kind, fold, out_prefix, score_test):
     d = pd.read_parquet(find("dev_pairs.parquet"))
     max_len = int(json.load(open(f"{TMP}/max_len.json"))["max_len"])
     tr, va = d[d.ce_fold != fold].reset_index(drop=True), d[d.ce_fold == fold].reset_index(drop=True)
-    model = AutoModelForSequenceClassification.from_pretrained(name, num_labels=1).to(dev)
+    model = AutoModelForSequenceClassification.from_pretrained(name, num_labels=1, ignore_mismatched_sizes=True).to(dev)
     opt = torch.optim.AdamW(model.parameters(), lr=LR, weight_decay=WD)
     steps = EPOCHS * math.ceil(len(tr) / BATCH)
     sched = get_linear_schedule_with_warmup(opt, int(WARM * steps), steps)
@@ -126,7 +126,7 @@ def precision_check():
     out = {}
     for kind, name in MODELS.items():
         tok = AutoTokenizer.from_pretrained(name)
-        m = AutoModelForSequenceClassification.from_pretrained(name, num_labels=1).cuda().eval()
+        m = AutoModelForSequenceClassification.from_pretrained(name, num_labels=1, ignore_mismatched_sizes=True).cuda().eval()
         enc = tok(d.text_a.tolist(), d.text_b.tolist(), truncation=True, max_length=128, padding=True, return_tensors="pt")
         enc = {k: v.cuda() for k, v in enc.items() if k != "token_type_ids"}
         with torch.no_grad():
