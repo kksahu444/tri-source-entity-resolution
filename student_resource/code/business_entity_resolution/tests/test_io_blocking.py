@@ -111,6 +111,23 @@ def test_c7_forward_pass_survives_query_competition():
     pairs, _ = block_country({"blocking": bc}, q, r)
     assert {(1, n), (1, n + 1)} <= c7(pairs)
 
+def test_dense_channel_keeps_top_k_in_partition():
+    from src.blocking.union import block_country
+    r = pd.DataFrame({"entity_id": ["S2-0", "S3-1", "S2-2"], "core": ["alpha mart", "beta ltd", "टाटा"],
+                      "addr_core": ["1 mg road", "2 mg road", ""], "house": ["1", "2", ""], "street": ["mg road"] * 2 + [""],
+                      "city": ["pune"] * 2 + [""], "src": np.int8(2)})
+    q = pd.DataFrame({"entity_id": ["S1-0"], "core": ["tata"], "addr_core": ["9 fc road"], "house": ["9"],
+                      "street": ["fc road"], "city": ["pune"], "src": np.int8(1)})
+    # S2-9 is another country's record; S3-1 falls outside k=1
+    dense = pd.DataFrame({"s1": ["S1-0"] * 3, "cand": ["S3-1", "S2-2", "S2-9"], "score": np.float32([0.81, 0.93, 0.99])})
+    bc = {"k_tfidf": 30, "crowd_cap": 10, "key_block_cap": 200, "key_keep": 10, "query_chunk": 100, "c1_generate": 100,
+          "dense": {"enabled": True, "k": 1}}
+    pairs, _ = block_country({"blocking": bc}, q, r, dense)
+    c4 = pairs[pairs["in_c4"] == 1]
+    assert c4[["qi", "ri"]].values.tolist() == [[0, 2]] and np.isclose(c4["dense_cos"].iloc[0], 0.93)
+    assert pairs.loc[pairs["in_c4"] == 0, "dense_cos"].isna().all()
+
+
 def test_crowd_and_key_channels():
     qk = pd.Series(["a b", "c", ""])
     rk = pd.Series(["a b"] * 3 + ["c"] * 12 + [""])

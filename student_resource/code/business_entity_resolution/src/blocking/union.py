@@ -1,5 +1,8 @@
 """Stage `block` (D2): union of C1 (TF-IDF), C2 (name crowd) and C5 (keys) per country.
 
+C4 (dense, optional): top-k per S1 from artifacts/dense/dense_{train|test}.parquet (s1, cand, score), written
+by the Kaggle kernel kaggle/dense_ds (multilingual-e5-small); blocking.dense: {enabled, k}.
+
 Outputs per (split, country) in artifacts/block/:
   {split}_{country}_q.parquet      query S1 rows (normalised view), row order = qi
   {split}_{country}_r.parquet      S2 u S3 rows of the same country, row order = ri
@@ -127,7 +130,17 @@ def _topn_per_q(qi, ri, score, n):
     return qi[keep], ri[keep], score[keep]
 
 
-def block_country(cfg, q: pd.DataFrame, r: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
+def dense_channel(dense: pd.DataFrame, q: pd.DataFrame, r: pd.DataFrame, k: int):
+    """C4: each S1's top-k dense neighbours that are in this partition's record pool."""
+    qpos = pd.Series(np.arange(len(q)), index=q["entity_id"])
+    rpos = pd.Series(np.arange(len(r)), index=r["entity_id"])
+    d = dense.assign(qi=qpos.reindex(dense["s1"]).to_numpy(), ri=rpos.reindex(dense["cand"]).to_numpy()).dropna(subset=["qi", "ri"])
+    d = d.sort_values(["qi", "score"], ascending=[True, False])
+    d = d[d.groupby("qi").cumcount() < k]
+    return d["qi"].to_numpy(np.int32), d["ri"].to_numpy(np.int32), d["score"].to_numpy(np.float32)
+
+
+def block_country(cfg, q: pd.DataFrame, r: pd.DataFrame, dense: pd.DataFrame | None = None) -> tuple[pd.DataFrame, dict]:
     bc, t = cfg["blocking"], Timer()
     info = {}
     space = TfidfSpace()
@@ -185,6 +198,11 @@ def block_country(cfg, q: pd.DataFrame, r: pd.DataFrame) -> tuple[pd.DataFrame, 
         info["t_c7"] = t()
         log.info("  C7: %s pairs from %s empty-address records (%.0fs)", f"{len(chans.get('c7', ([],))[0]):,}",
                  f"{len(emp):,}", t())
+    if dense is not None:
+        c4q, c4r, c4s = dense_channel(dense, q, r, (bc.get("dense") or {}).get("k", 10))
+        chans["c4"] = (c4q, c4r)
+        info["t_c4"] = t()
+        log.info("  C4: %s pairs (%.0fs)", f"{len(c4q):,}", t())
     sh = bc.get("second_hop") or {}
     if sh.get("enabled", False):
         # C6: expand from confident first-pass pairs through exact record keys (query expansion)
@@ -211,6 +229,9 @@ def block_country(cfg, q: pd.DataFrame, r: pd.DataFrame) -> tuple[pd.DataFrame, 
         if name == "c2":
             pairs["crowd_size"] = np.int32(0)
             pairs.loc[pos, "crowd_size"] = c2size
+        if name == "c4":
+            pairs["dense_cos"] = np.float32(np.nan)
+            pairs.loc[pos, "dense_cos"] = c4s
     qi, ri = pairs["qi"].to_numpy(), pairs["ri"].to_numpy()
     pairs["cos_name"] = pair_cos(qn, rn, qi, ri)
     pairs["cos_addr"] = pair_cos(qa, ra, qi, ri)
@@ -268,6 +289,8 @@ def run(cfg: dict, split: str = "dev", frac: float | None = None) -> dict:
         rng = np.random.default_rng(cfg["seed"])
         s1_tbl = s1_tbl.filter(pa.array(rng.random(s1_tbl.num_rows) < frac))
     res = {"stage": "block_bench" if frac else "block", "notes": ""}
+    dense_path = os.path.join(cfg["paths"]["artifacts"], "dense", f"dense_{src_split}.parquet")
+    use_dense = (cfg["blocking"].get("dense") or {}).get("enabled", False)
     stats = {}
     for country in sorted(set(s1_tbl["country"].to_pylist())):
         q_tbl = s1_tbl.filter(pc.equal(s1_tbl["country"], country))
@@ -276,7 +299,8 @@ def run(cfg: dict, split: str = "dev", frac: float | None = None) -> dict:
                                   for k in (2, 3)])
         r = tbl_r.select(BLOCK_COLS).to_pandas()
         log.info("block %s %s: loaded %s queries, %s records (%.0fs)", split, country, f"{len(q):,}", f"{len(r):,}", t())
-        pairs, info = block_country(cfg, q, r)
+        dense = pq.read_table(dense_path, filters=[("s1", "in", q["entity_id"].tolist())]).to_pandas() if use_dense else None
+        pairs, info = block_country(cfg, q, r, dense)
         if frac:
             per_q = (info["t_c1"] - info["t_vectorize"] + info["t_union"] - info["t_c5"]) / max(len(q), 1)
             info["projected_full_s"] = round(info["t_union"] + per_q * (n_full[country] - len(q)), 0)

@@ -19,7 +19,7 @@ import torch
 
 WORK, DATA = "/kaggle/working", "/kaggle/tmp/data"
 K = 30
-BUDGET_S = 3 * 3600
+SPLITS = ("train",)
 WS = re.compile(r"\s+")
 
 
@@ -136,36 +136,32 @@ def precision_check(name):
 def main():
     gpu_profile()
     fetch()
-    frames = {(s, k): read(s, k) for s in ("test", "train") for k in (1, 2, 3)}
-    n_texts = sum(len(v) for v in frames.values())
-    name = "BAAI/bge-m3"
-    sample = frames[("test", 2)]["text"].tolist()[:20000]
-    t = time.time()
-    encode(sample, name, "cuda:0")
-    proj = (time.time() - t) / len(sample) * n_texts / 2
-    log(f"bge-m3 1% benchmark: projected {proj / 3600:.2f} h on 2 GPUs")
-    if proj > BUDGET_S:
-        name = "intfloat/multilingual-e5-small"
+    # version 2 wrote dense_test.parquet and was then killed (RAM) holding all six frames plus the test
+    # embeddings; e5-small was chosen there (bge-m3 projected 17 h), so the benchmark is skipped
+    name = "intfloat/multilingual-e5-small"
     precision_check(name)
-    qp, pp = ("query: ", "passage: ") if "e5" in name else ("", "")
+    qp, pp = "query: ", "passage: "
     log("model", name)
-    for split in ("test", "train"):
-        s1 = frames[(split, 1)]
-        rec = pd.concat([frames[(split, 2)], frames[(split, 3)]], ignore_index=True)
+    for split in SPLITS:
+        s1 = read(split, 1)
+        rec = pd.concat([read(split, 2), read(split, 3)], ignore_index=True)
         qe = encode_2gpu(s1["text"].tolist(), name, qp, f"{split}_q")
         re_ = encode_2gpu(rec["text"].tolist(), name, pp, f"{split}_r")
         log(split, "encoded", qe.shape, re_.shape)
+        rec_ids, rec_country = rec["entity_id"].to_numpy(), rec["country"].to_numpy()
+        del rec
         out = []
         for n, c in enumerate(sorted(s1["country"].unique())):
             qi = np.flatnonzero(s1["country"].to_numpy() == c)
-            ri = np.flatnonzero(rec["country"].to_numpy() == c)
+            ri = np.flatnonzero(rec_country == c)
             v, i = topk(qe[qi], re_[ri], f"cuda:{n % 2}")
             out.append(pd.DataFrame({"s1": np.repeat(s1["entity_id"].to_numpy()[qi], K),
-                                     "cand": rec["entity_id"].to_numpy()[ri][i.ravel()],
+                                     "cand": rec_ids[ri][i.ravel()],
                                      "score": v.ravel()}))
             log(split, c, "top-k done", len(qi))
         pd.concat(out, ignore_index=True).to_parquet(f"{WORK}/dense_{split}.parquet", index=False, compression="zstd")
         json.dump({"model": name}, open(f"{WORK}/dense_meta.json", "w"))
+        del qe, re_, out, s1
     log("done")
 
 
