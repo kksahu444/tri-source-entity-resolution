@@ -1,0 +1,4 @@
+{"id": "aditya103856/amlc26-probe-fr", "title": "amlc26-probe-fr", "code_file": "run_probe.py", "language": "python",
+ "kernel_type": "script", "is_private": true, "enable_gpu": false, "enable_internet": false,
+ "dataset_sources": ["aditya103856/amlc26-er-data", "aditya103856/amlc26-er-code", "aditya103856/amlc26-uploads"],
+ "competition_sources": [], "kernel_sources": []}
