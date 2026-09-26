@@ -78,6 +78,17 @@ def test_second_hop_channel_and_keys():
     assert set(zip(qi.tolist(), ri.tolist())) == {(7, 0), (7, 1)}
 
 
+def test_reverse_name_channel():
+    from src.blocking.union import reverse_name_channel
+    qn = _rand_csr(40, 30, 3)                    # 40 S1 name vectors
+    rn = sp.vstack([qn[[5, 17, 33]], _rand_csr(10, 30, 4)], format="csr")   # records 0-2 copy S1 5, 17, 33
+    rn.sort_indices()
+    qi, ri = reverse_name_channel(np.array([0, 1, 2]), rn, qn, k=3, min_cos=0.3, chunk=2)
+    got = set(zip(qi.tolist(), ri.tolist()))
+    assert {(5, 0), (17, 1), (33, 2)} <= got and set(ri.tolist()) <= {0, 1, 2}
+    assert all((qi[ri == j]).size <= 3 for j in (0, 1, 2))
+
+
 def test_crowd_and_key_channels():
     qk = pd.Series(["a b", "c", ""])
     rk = pd.Series(["a b"] * 3 + ["c"] * 12 + [""])

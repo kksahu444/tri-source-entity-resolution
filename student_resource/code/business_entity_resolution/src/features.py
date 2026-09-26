@@ -76,7 +76,7 @@ BLOCK_FEATS = ["in_c1", "in_c2", "in_c5a", "in_c5b", "c1_rank", "crowd_size", "c
 
 def cheap_features(q: pd.DataFrame, r: pd.DataFrame, pairs: pd.DataFrame) -> pd.DataFrame:
     qi, ri = pairs["qi"].to_numpy(), pairs["ri"].to_numpy()
-    f = pairs[BLOCK_FEATS + [c for c in ("in_c6",) if c in pairs.columns]].astype(F32).copy()
+    f = pairs[BLOCK_FEATS + [c for c in ("in_c6", "in_c7") if c in pairs.columns]].astype(F32).copy()
     f["src3"] = (pairs["src"].to_numpy() == 3).astype(F32)
     cols = {k: [] for k in ("n_jw", "n_tset", "house_eq", "house_conflict", "addr_r_empty")}
     for s in range(0, len(qi), CHUNK):

@@ -82,6 +82,13 @@ def house_key(df: pd.DataFrame, street_df: dict | None = None) -> pd.Series:
     return (df["house"] + "|" + tail).where((df["house"] != "") & (tail != ""), "")
 
 
+def reverse_name_channel(rec_idx: np.ndarray, rn, qn, k: int, min_cos: float, chunk: int):
+    """C7: the given records (empty address) retrieve their top-k S1 queries by name cosine.
+    Returns (qi, ri) int32 arrays."""
+    eq, ek, _ = topk(rn[rec_idx], qn.T.tocsr(), k, threshold=min_cos, chunk=chunk)
+    return ek.astype(np.int32), rec_idx[eq].astype(np.int32)
+
+
 def record_key_codes(r: pd.DataFrame, names: list[str]) -> dict:
     """Exact record keys for C6: int code per record, -1 where a key part is empty."""
     core = r["core"].astype(str)
@@ -158,6 +165,18 @@ def block_country(cfg, q: pd.DataFrame, r: pd.DataFrame) -> tuple[pd.DataFrame, 
 
     n_r = np.int64(len(r))
     chans = {"c1": (c1q, c1r), "c2": (c2q, c2r), **{k: v[:2] for k, v in keys.items()}}
+    rv = bc.get("reverse_empty") or {}
+    if rv.get("enabled", False):
+        # C7: records with an empty address retrieve their top-k S1s by name alone. In C1 their
+        # combined score is capped at 0.5 and in large name crowds C2 ranks them last, so the
+        # error analysis found 59% of the blocking loss in entities with such a missed record.
+        emp = np.flatnonzero(r["addr_core"].to_numpy() == "")
+        if len(emp):
+            chans["c7"] = reverse_name_channel(emp, rn, qn, rv.get("k", 10), rv.get("min_cos", 0.3), bc["query_chunk"])
+        info["c7_records"] = int(len(emp))
+        info["t_c7"] = t()
+        log.info("  C7: %s pairs from %s empty-address records (%.0fs)", f"{len(chans.get('c7', ([],))[0]):,}",
+                 f"{len(emp):,}", t())
     sh = bc.get("second_hop") or {}
     if sh.get("enabled", False):
         # C6: expand from confident first-pass pairs through exact record keys (query expansion)
