@@ -11,6 +11,61 @@ Terms used below:
 
 ---
 
+## 0. Update, 27 Sep 02:45 IST (supersedes sections 1 and 7)
+
+**Leaderboard so far**
+
+| Upload | Model | Dev OOF | Public |
+|---|---|---|---|
+| upload 1 | iteration 1, stage A | 0.97143 (`0926-032111-decide`) | 0.960 |
+| France probe | upload 1 with France IDs broken | - | 0.821 (gives France F0.5 about 0.928) |
+| upload 2 | iteration 3, stage B (Kaggle) | 0.98049 (`kaggle 0926-102147-decide`) | **0.938** |
+
+**Why upload 2 went down (full evidence: `runs/decoy_shift.md`)**
+
+- Test contains decoy businesses that train almost never has. Each decoy:
+  - has about 2 records;
+  - is named like an S1 with a different ending ("Group Misaon Pelican", "Corp Misaon Pelican");
+  - sits on the S1's street at a slightly higher house number (97% positive offset, usually +1 to +21);
+  - has no S1 of its own.
+- They appear beside about 40% of US S1s, 30% of French and 5% of Indian: 0.84 decoy-group records per US S1 on
+  test against 0.06 on dev.
+- Iteration 2 added "support" features (other candidates share this house or address), and stage B built on them.
+  On dev a decoy is a single record, so support means a true match. On test the decoy's own siblings support it.
+- Upload 2 therefore linked them: +0.37 links per US S1. Dev could not show this. Upload 1 had neither
+  feature and was unaffected.
+
+**Fix (iteration 5, `config_v5.yaml`, branch `adi`)**
+
+1. Test-like dev: synthetic decoy entities are added to the dev pool at the rate measured on test (US 0.78,
+   India 0.11 records per query). Each is built from the S1's name without its legal form plus an ending mined
+   from the country's S1 names, and a true record's address with one shifted house number. They go through the
+   same normaliser as real records.
+2. Two new features: the signed house offset (record minus S1) and the S1's count of exact-house candidates.
+3. `decide` starts from stage A and adopts stage B, then the cross-encoder, only if the paired bootstrap interval
+   of the gain on this dev excludes zero.
+4. `src/acceptance.py` gates every upload by comparing near-house links beside an exact-house link with the train
+   truth level. Upload 1 passes; upload 2 fails (US 0.0466 per S1 against 0.0052). `src/stage_upload.py` runs the
+   official validator plus this check before any file is copied to `submissions/`.
+5. Also in iteration 5:
+   - C8 address-only channel;
+   - C7 widened to top-25 plus the forward pass from the blocking lane.
+
+   Dev pair completeness: US 0.99015, India 0.97872 (iteration 3: 0.98727 / 0.97591).
+
+**Running on Kaggle**
+
+| Kernel | What | Expected |
+|---|---|---|
+| `amlc26-pipeline-cpu` v4 | iteration 5, no cross-encoder (LightGBM CPU) | dev decision about 05:30, file about 08:00 |
+| `amlc26-pipeline-cpu` v3 | same without the two house-offset features (ablation) | similar |
+| `amlc26-pipeline` v5 | iteration 5 with the cross-encoder (2x T4, XGBoost GPU) | about 10:00-10:30 |
+
+**Next decisions**: pick the upload 3 file by dev OOF among runs that pass the acceptance check (12:00), keep
+upload 1 as the fallback, and do not tune anything on the public score.
+
+---
+
 ## 1. Summary
 
 - **A validated leaderboard file exists:** `student_resource/submissions/upload_1/matching_results.tsv`.
@@ -169,7 +224,7 @@ Judgment calls a reviewer could ask about:
 
 ---
 
-## 7. What is running now
+## 7. What was running on 26 Sep morning (historical; see section 0)
 
 Iteration 2 (`runs/iter2c_chain.sh`, config `config_v2.yaml`) adds three things:
 
