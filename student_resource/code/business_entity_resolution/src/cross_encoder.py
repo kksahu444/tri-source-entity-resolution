@@ -115,7 +115,9 @@ def worker(kind, pairs_path, out_prefix, fold=None, model_dir=None, max_len=128)
                       max_length=max_len, padding=True, return_tensors="pt")
             yield idx, {k: v.to(dev) for k, v in enc.items() if k != "token_type_ids"}
 
-    model = AutoModelForSequenceClassification.from_pretrained(name, num_labels=1, ignore_mismatched_sizes=True).to(dev)
+    # fp32 master weights: transformers 5 loads a checkpoint in its stored dtype (fp16 for these), and the fp16
+    # GradScaler refuses fp16 parameters ("Attempting to unscale FP16 gradients"); autocast still runs in fp16
+    model = AutoModelForSequenceClassification.from_pretrained(name, num_labels=1, ignore_mismatched_sizes=True).float().to(dev)
     res = {"kind": kind, "fold": fold}
     if model_dir is None:                                   # train on the other folds
         tr = d[d.ce_fold != fold].reset_index(drop=True)
@@ -206,7 +208,7 @@ def precision_and_length(pairs: pd.DataFrame) -> tuple[dict, int]:
         if not torch.cuda.is_available():
             out[kind] = {"pass": True, "note": "no GPU (smoke test)"}
             continue
-        m = AutoModelForSequenceClassification.from_pretrained(name, num_labels=1, ignore_mismatched_sizes=True).cuda().eval()
+        m = AutoModelForSequenceClassification.from_pretrained(name, num_labels=1, ignore_mismatched_sizes=True).float().cuda().eval()
         enc = tok(sample.text_a.tolist(), sample.text_b.tolist(), truncation=True, max_length=128, padding=True, return_tensors="pt")
         enc = {k: v.cuda() for k, v in enc.items() if k != "token_type_ids"}
         with torch.no_grad():
