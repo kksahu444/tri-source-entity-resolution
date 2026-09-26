@@ -67,3 +67,15 @@ def test_city_is_found_regardless_of_segment_order():
     assert city("41 ARLINGTON AVENUE, SAINT PAUL, MN") == "st paul"
     assert city("12 Rue Saint-Honoré, 75001 Paris, France", "France") == "paris"
     assert city("PUNE, PAVITRA CLASSIC, 38 A, SOMWAR PETH, #1, PUNE CITY, Maharashtra", "India") == "pune"
+
+
+def test_corrupted_and_indic_legal_forms_leave_the_core():
+    core = lambda raw: normalize_name(raw)["name_core"]
+    assert core("Ei Network Pirvdcae Limited") == "ei network"
+    assert core("Smt Kochi Trading Priiage (Limited)") == "kochi trading"
+    assert core("बालाजी वेंचर्स प्रा. लि.") == "balaji venchars"
+    assert core("Buddha Services Limited Center") == "buddha svc"
+    # real names near "private" stay names
+    assert core("ABC Printers Limited") == "abc printers"
+    assert core("Parvati Limited") == "parvati"
+    assert core("Mr Center") == "ctr"

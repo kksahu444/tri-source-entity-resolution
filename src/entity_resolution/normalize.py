@@ -12,11 +12,14 @@ Design rules
 """
 from __future__ import annotations
 
+import os
 import re
 import unicodedata
 from functools import lru_cache
 
 import pandas as pd
+from joblib import Parallel, delayed
+from rapidfuzz.fuzz import ratio
 
 # ----------------------------------------------------------------------------------------
 # generic cleaning
@@ -141,6 +144,7 @@ NAME_PHRASES = {
     "limited partnership": "lp",
     "public limited company": "plc",
     "one person company": "opc",
+    "pra li": "pvt ltd",
     "doing business as": "dba",
     "trading as": "dba",
     "also known as": "aka",
@@ -161,6 +165,9 @@ NAME_CANON = {
     "company": "co", "companies": "co", "cos": "co", "compnay": "co",
     "limited": "ltd", "ltda": "ltd", "lmtd": "ltd", "ltd": "ltd",
     "private": "pvt", "praivet": "pvt", "privet": "pvt", "pvte": "pvt", "prv": "pvt", "pte": "pvt", "priv": "pvt",
+    # romanised Indic spellings (Tamil, Bengali, Malayalam, Hindi LLP spelt out)
+    "limitet": "ltd", "limirrad": "ltd", "piraivet": "pvt", "praibhet": "pvt", "praivarr": "pvt",
+    "elaelapi": "llp", "elelpi": "llp",
     "public": "pub",
     "et": "and", "und": "and",
     # frequent business words
@@ -201,6 +208,8 @@ LEGAL_TOKENS = frozenset(
 _STRONG_LEGAL = frozenset("inc corp ltd llc llp plc pvt opc pllc lllp gmbh sarl sas sasu eurl".split())
 _NAME_STOP = frozenset("the a an of and le la les l de du des d ms".split())
 _DBA_MARKERS = frozenset("dba aka fka ta".split())
+# honorifics and the "Center" tag the sources add around names; dropped only at the ends of the core
+_NAME_AFFIX = frozenset("mr mrs smt dr sri ctr".split())
 _NAME_PHRASE_RE = _phrase_regex(NAME_PHRASES)
 _DOMAIN = re.compile(r"\b(?:www\.)?([a-z0-9][a-z0-9-]*)\.(?:co\.in|com|net|org|in|co|biz|info|fr|us|io)\b", re.I)
 
@@ -228,7 +237,26 @@ def _core_tokens(tokens: list[str]) -> list[str]:
     while toks and toks[-1] in LEGAL_TOKENS:  # trailing "... & co", "... sa"
         toks.pop()
     toks = [t for t in toks if t not in _NAME_STOP]
+    while len(toks) > 1 and toks[0] in _NAME_AFFIX:
+        toks.pop(0)
+    while len(toks) > 1 and toks[-1] in _NAME_AFFIX:
+        toks.pop()
     return toks or [t for t in tokens if t not in _DBA_MARKERS] or tokens
+
+
+def _fix_legal_typos(tokens: list[str]) -> list[str]:
+    """``prvsiare ltd`` -> ``pvt ltd``: noisy sources corrupt "Private" at random, but the token
+    right before "Limited" is still close to it. Real words that land near "private" start with
+    "pa" (parvati, parivar) or "print", and are left alone."""
+    out = list(tokens)
+    for i in range(len(out) - 1):
+        t = out[i]
+        if (out[i + 1] == "ltd" and len(t) >= 6 and t[:2] in ("pr", "pi", "pv") and not t.startswith("print")
+                and t not in NAME_CANON):
+            r = ratio(t, "private")
+            if r >= 70 or (r >= 64 and "v" in t):
+                out[i] = "pvt"
+    return out
 
 
 def _split_dba(tokens: list[str]) -> list[list[str]]:
@@ -251,7 +279,7 @@ def normalize_name(raw: object) -> dict:
     if isinstance(raw, str) and "." in raw:
         raw = _DOMAIN.sub(r"\1", raw)
     text = _replace_phrases(clean_text(raw), _NAME_PHRASE_RE, NAME_PHRASES)
-    tokens = [NAME_CANON.get(t, t) for t in text.split()]
+    tokens = _fix_legal_typos([NAME_CANON.get(t, t) for t in text.split()])
     core = _core_tokens(tokens)
     parts = _split_dba(tokens)
     variants = [" ".join(_core_tokens(p)) for p in parts] if len(parts) > 1 else []
@@ -443,8 +471,7 @@ def normalize_country(raw: object) -> str:
     return clean_text(raw)
 
 
-def normalize_records(records: pd.DataFrame) -> pd.DataFrame:
-    """Return ``records`` with all normalised columns appended (row order preserved)."""
+def _normalize_chunk(records: pd.DataFrame) -> pd.DataFrame:
     names = pd.DataFrame([normalize_name(v) for v in records["business_name"].tolist()], index=records.index)
     addrs = pd.DataFrame(
         [normalize_address(a, c) for a, c in zip(records["business_address"].tolist(), records["country"].tolist())],
@@ -453,3 +480,15 @@ def normalize_records(records: pd.DataFrame) -> pd.DataFrame:
     out = pd.concat([records, names, addrs], axis=1)
     out["country_norm"] = [normalize_country(c) for c in records["country"].tolist()]
     return out
+
+
+def normalize_records(records: pd.DataFrame, chunk: int = 250_000) -> pd.DataFrame:
+    """Return ``records`` with all normalised columns appended (row order preserved).
+
+    Pure Python per record, so partitions of millions of rows are split across worker processes.
+    """
+    if len(records) <= chunk:
+        return _normalize_chunk(records)
+    parts = Parallel(n_jobs=os.cpu_count() or 1)(
+        delayed(_normalize_chunk)(records.iloc[s:s + chunk]) for s in range(0, len(records), chunk))
+    return pd.concat(parts)

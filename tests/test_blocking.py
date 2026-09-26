@@ -97,3 +97,31 @@ def test_name_token_and_city_key():
     cands = block(rows, full_char_k=0, addr_word_k=0, crowd_k=0, score_weights={})
     assert cands["cand_id"].tolist() == ["S2-1"]
     assert cands["blk_mask"].tolist() == [16]
+
+
+def test_blank_address_targets_found_by_name():
+    rows = [("S1-1", "Ei Network Private Limited", "Flat 3, Venu Apartments, Model Colony, Pune", "India"),
+            ("S2-1", "Ei Network Pirvdcae Limited", "", "India"),
+            ("S2-2", "Orbit Traders", "", "India")]
+    cands = block(rows, full_char_k=0, addr_word_k=0, crowd_k=0, score_weights={}, max_key_block=0,
+                  blank_name_k=5)
+    assert cands["cand_id"].tolist() == ["S2-1"]
+    assert cands["blk_mask"].tolist() == [128]
+
+
+def test_house_number_and_city_key():
+    rows = [("S1-1", "Lotus Foods Private Limited", "1008, Promenade 3, Lbs Road, Mumbai, Maharashtra", "India"),
+            ("S2-1", "लोटस फूड्स प्राइवेट लिमिटेड", "1008, Mumbai, MH", "India"),
+            ("S2-2", "Lotus Foods Private Limited", "1008, Pune, MH", "India")]
+    cands = block(rows, full_char_k=0, addr_word_k=0, crowd_k=0, score_weights={}, blank_name_k=0)
+    assert cands["cand_id"].tolist() == ["S2-1"]
+
+
+def test_indic_script_targets_matched_on_skeleton():
+    rows = [("S1-1", "Galaxy Consultancy Private Limited", "E-29, Nehru Ground, Faridabad, Haryana", "India"),
+            ("S2-1", "गैलेक्सी कंसल्टेंसी प्राइवेट लिमिटेड", "E-29, Faridabad, HR", "India"),
+            ("S2-2", "Galaxy Consultancy Private Limited", "E-29, Faridabad, HR", "India")]
+    cands = block(rows, full_char_k=0, addr_word_k=0, crowd_k=0, score_weights={}, max_key_block=0,
+                  blank_name_k=0, script_k=5)
+    assert cands["cand_id"].tolist() == ["S2-1"]  # the Latin-script twin is left to full_char
+    assert cands["blk_mask"].tolist() == [256]

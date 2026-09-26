@@ -9,13 +9,17 @@
     "name_char_k": 0,
     "crowd_k": 10,
     "max_crowd": 2000,
+    "blank_name_k": 5,
+    "script_k": 10,
     "min_sim": 0.05,
-    "char_max_df": 0.05,
+    "char_max_df": 0.02,
     "max_key_block": 30,
     "score_weights": {
       "full_char": 1.0,
       "addr_word": 0.5
     },
+    "agree_weight": 0.3,
+    "channel_weight": 0.3,
     "max_per_source": 10,
     "train_s1_sample": 1.0,
     "use_embeddings": false,

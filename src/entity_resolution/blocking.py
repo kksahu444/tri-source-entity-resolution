@@ -11,9 +11,13 @@ full_char       char 3-4gram TF-IDF of name + address            typos, generic 
 crowd           same compact core name, top k by address cosine  big same-name crowds (a chain's
                                                                  branches, "Sai Traders")
 addr_word       word 1-2gram TF-IDF of the address core          DBA / trade-name differences
+blank_name      char 3-4gram TF-IDF of the name, against         targets whose address is blank
+                targets with no address only                     (name is all they have)
+script          char 3-4gram TF-IDF of name skeleton + address,  romanised Indic-script names
+                against Indic-script targets only                (phonetic spelling)
 key             exact keys (exact address; house number + street  exact duplicates, blank or
                 + first name skeleton; first name skeleton +     reordered addresses the kNN
-                city)                                            ranks low
+                city; any address number + city)                 ranks low
 name_word       word TF-IDF of name tokens + phonetic skeletons  name-only: off by default (k=0)
 name_char       char 2-4gram TF-IDF of the legal-free name       name-only: off by default (k=0)
 embed           optional multilingual sentence embedding         semantic / cross-lingual
@@ -23,7 +27,8 @@ Content-identical target records (same source, same normalised name and address)
 once through a representative row and expanded back to every member id afterwards, so each
 duplicate is listed and costs no extra kNN work.
 
-The union is ranked by a fixed, hand-weighted blocking score (a sum of TF-IDF cosines) and cut to
+The union is ranked by a fixed, hand-weighted blocking score (TF-IDF cosines plus a bonus for each
+channel that proposed the pair) and cut to
 ``max_per_source`` candidates per Source-1 record and target source, plus each target's best
 ``reverse_k`` Source-1 records. The cut is a rule, not a
 learned model, so the output of this module is exactly what the first scoring model sees
@@ -41,18 +46,24 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 import scipy.sparse as sp
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sparse_dot_topn import sp_matmul_topn
+from joblib import Parallel, delayed
+from sklearn.feature_extraction.text import HashingVectorizer
+from sklearn.preprocessing import normalize
+from sparse_dot_topn import sp_matmul_topn, zip_sp_matmul_topn
 
 from .config import BlockingConfig
+from .normalize import _HAS_INDIC
 
 log = logging.getLogger(__name__)
 
 BLOCKER_BITS = {"name_char": 1, "name_word": 2, "full_char": 4, "addr_word": 8, "key": 16, "embed": 32,
-                "crowd": 64}
+                "crowd": 64, "blank_name": 128,
+                "script": 256}
 KNN_BLOCKERS = ("full_char", "name_word", "addr_word", "name_char")
 FEATURE_MATS = ("name_char", "name_word", "full_char", "addr_word", "addr_char")
 N_THREADS = os.cpu_count() or 1
+HASH_FEATURES = 1 << 22  # ~1M distinct char grams in a 4M-row partition: ~12% share a bucket
+CHUNK_ROWS = 500_000
 
 
 @dataclass
@@ -68,13 +79,51 @@ class TextIndex:
     addr_idf: dict[str, float] = field(default_factory=dict)
 
 
-def _tfidf(texts: list[str], **kwargs) -> sp.csr_matrix:
-    """L2-normalised TF-IDF matrix (rows are unit vectors, so dot product = cosine)."""
-    vec = TfidfVectorizer(lowercase=False, sublinear_tf=True, dtype=np.float32, **kwargs)
-    try:
-        return vec.fit_transform(texts).tocsr()
-    except ValueError:  # empty vocabulary, e.g. every address blank, or max_df pruned everything
-        return sp.csr_matrix((len(texts), 1), dtype=np.float32)
+def _tfidf(texts: list[str], max_df: float = 1.0, **kwargs) -> sp.csr_matrix:
+    """L2-normalised TF-IDF matrix (rows are unit vectors, so dot product = cosine).
+
+    Same weighting as sklearn's smoothed, sublinear TfidfVectorizer, but the n-grams are hashed
+    and the rows built in chunks over two passes (document frequencies, then weights). At 4M+
+    rows TfidfVectorizer's vocabulary dict and unpruned int64 count matrix alone ran a 16 GB
+    machine into swap.
+    """
+    vec = HashingVectorizer(lowercase=False, n_features=HASH_FEATURES, alternate_sign=False, norm=None,
+                            dtype=np.float32, **kwargs)
+    n = len(texts)
+    chunks = [texts[s:s + CHUNK_ROWS] for s in range(0, n, CHUNK_ROWS)]
+    # the analyzer is pure Python, so chunks go to worker processes when there is more than one
+    pool = Parallel(n_jobs=min(len(chunks), N_THREADS)) if len(chunks) > 1 else None
+    dfs = pool(delayed(_doc_freq)(vec, c) for c in chunks) if pool else [_doc_freq(vec, c) for c in chunks]
+    df = np.sum(dfs, axis=0)
+    del dfs
+    idf = (np.log((1 + n) / (1 + df)) + 1).astype(np.float32)
+    idf[df > max_df * n] = 0
+    del df
+    parts = pool(delayed(_weigh)(vec, c, idf) for c in chunks) if pool else [_weigh(vec, c, idf) for c in chunks]
+    del chunks
+    # np.empty pages are only committed when written, so filling the output while dropping each
+    # chunk keeps the peak near one copy instead of the two sp.vstack would hold
+    nnz = sum(x.nnz for x in parts)
+    indptr, indices = np.zeros(n + 1, np.int64), np.empty(nnz, np.int32)
+    values = np.empty(nnz, np.float32)
+    row = at = 0
+    for i, x in enumerate(parts):
+        indptr[row + 1:row + x.shape[0] + 1] = x.indptr[1:] + at
+        indices[at:at + x.nnz], values[at:at + x.nnz] = x.indices, x.data
+        row, at = row + x.shape[0], at + x.nnz
+        parts[i] = None
+    return sp.csr_matrix((values, indices, indptr), shape=(n, HASH_FEATURES))
+
+
+def _doc_freq(vec: HashingVectorizer, texts: list[str]) -> np.ndarray:
+    return np.bincount(vec.transform(texts).indices, minlength=HASH_FEATURES).astype(np.int32)
+
+
+def _weigh(vec: HashingVectorizer, texts: list[str], idf: np.ndarray) -> sp.csr_matrix:
+    x = vec.transform(texts)
+    x.data = (1 + np.log(x.data)) * idf[x.indices]
+    x.eliminate_zeros()
+    return normalize(x, copy=False)
 
 
 def _idf(docs: list[str]) -> dict[str, float]:
@@ -136,14 +185,20 @@ def _encode(recs: pd.DataFrame, model_name: str) -> np.ndarray:
     return emb.astype(np.float32)
 
 
-def sparse_topk(query: sp.csr_matrix, data: sp.csr_matrix, k: int, min_sim: float) -> tuple[np.ndarray, ...]:
-    """Top-``k`` cosine neighbours in ``data`` for every row of ``query`` (multi-threaded, C++).
+def sparse_topk(mat: sp.csr_matrix, q_rows: np.ndarray, d_rows: np.ndarray, k: int,
+                min_sim: float) -> tuple[np.ndarray, ...]:
+    """Top-``k`` cosine neighbours among rows ``d_rows`` of ``mat`` for every row in ``q_rows``
+    (multi-threaded, C++). The data side is transposed a chunk at a time and the partial top-k
+    lists zipped, so only one chunk is ever copied.
 
-    Returns ``(query_row, data_row, similarity)`` arrays.
+    Returns ``(query position, data position, similarity)`` arrays.
     """
-    if query.shape[0] == 0 or data.shape[0] == 0 or k <= 0:
+    if len(q_rows) == 0 or len(d_rows) == 0 or k <= 0:
         return np.array([], int), np.array([], int), np.array([], np.float32)
-    top = sp_matmul_topn(query, data.T.tocsr(), top_n=k, threshold=min_sim, n_threads=N_THREADS).tocoo()
+    query = mat[q_rows]
+    parts = [sp_matmul_topn(query, mat[d_rows[s:s + CHUNK_ROWS]].T.tocsr(), top_n=k, threshold=min_sim,
+                            n_threads=N_THREADS) for s in range(0, len(d_rows), CHUNK_ROWS)]
+    top = (parts[0] if len(parts) == 1 else zip_sp_matmul_topn(k, parts)).tocoo()
     return top.row.astype(np.int64), top.col.astype(np.int64), top.data.astype(np.float32)
 
 
@@ -179,8 +234,8 @@ def _record_keys(recs: pd.DataFrame) -> list[list[str]]:
     repeat hundreds of times in one country, so a name-only key is either a stop-key or noise.
     None needs a postcode (the test addresses have none)."""
     keys_all = []
-    for skel, addr, street, city in zip(recs["name_skel"], recs["addr_core"], recs["addr_street"],
-                                        recs["addr_city"]):
+    for skel, addr, street, city, numbers in zip(recs["name_skel"], recs["addr_core"], recs["addr_street"],
+                                                 recs["addr_city"], recs["addr_numbers"]):
         keys = []
         first = skel.split()[0] if skel else ""
         if len(addr) >= 12:
@@ -189,6 +244,9 @@ def _record_keys(recs: pd.DataFrame) -> list[list[str]]:
             keys.append(f"hs:{street}|{first}")
         if city and len(first) >= 3:
             keys.append(f"nc:{first}|{city}")
+        if city:
+            # short targets ("1008, Mumbai, MH") often share only the house number with the S1
+            keys.extend(f"#:{n}|{city}" for n in numbers.split())
         keys_all.append(keys)
     return keys_all
 
@@ -224,6 +282,18 @@ def _crowd_pairs(recs: pd.DataFrame, addr: sp.csr_matrix, s1_rows: np.ndarray, r
     if not qs:
         return np.array([], np.int64), np.array([], np.int64), np.array([], np.float32)
     return np.concatenate(qs), np.concatenate(ts), np.concatenate(ss)
+
+
+def _subset_pairs(q_texts: np.ndarray, t_texts: np.ndarray, subset: np.ndarray, k: int, min_sim: float,
+                  max_df: float) -> tuple[np.ndarray, ...]:
+    """Char 3-4gram neighbours of every query among the targets in ``subset`` only, on a TF-IDF
+    fitted to just those texts. Returns ``(query_pos, target_pos, similarity)``."""
+    if len(subset) == 0 or len(q_texts) == 0:
+        return np.array([], np.int64), np.array([], np.int64), np.array([], np.float32)
+    texts = list(q_texts) + list(t_texts[subset])
+    mat = _tfidf(texts, analyzer="char_wb", ngram_range=(3, 4), max_df=max_df if len(texts) >= 1000 else 1.0)
+    q, d, sim = sparse_topk(mat, np.arange(len(q_texts)), len(q_texts) + np.arange(len(subset)), k, min_sim)
+    return q, subset[d], sim
 
 
 def _key_pairs(recs: pd.DataFrame, s1_rows: np.ndarray, tgt_rows: np.ndarray,
@@ -295,7 +365,7 @@ def _block_target(recs: pd.DataFrame, index: TextIndex, cfg: BlockingConfig, s1_
     for name in KNN_BLOCKERS:
         if ks[name] > 0:
             mat = index.mats[name]
-            q, d, s = sparse_topk(mat[s1_rows], mat[rep_rows], ks[name], cfg.min_sim)
+            q, d, s = sparse_topk(mat, s1_rows, rep_rows, ks[name], cfg.min_sim)
             proposals.append((name, q * n_rep + d, s))
     if "embed" in index.dense:
         emb = index.dense["embed"]
@@ -304,6 +374,21 @@ def _block_target(recs: pd.DataFrame, index: TextIndex, cfg: BlockingConfig, s1_
     if cfg.crowd_k > 0:
         q, d, s = _crowd_pairs(recs, index.mats["addr_word"], s1_rows, rep_rows, cfg.crowd_k, cfg.max_crowd)
         proposals.append(("crowd", q * n_rep + d, s))
+    if cfg.blank_name_k > 0:
+        # name-only is noise when an address exists to rank by, but a target with a blank address
+        # has nothing else, and full_char scores it low against any S1 with a real address
+        name = recs["name_core"].to_numpy()
+        blank = np.flatnonzero(recs["addr_core"].to_numpy()[rep_rows] == "")
+        q, d, s = _subset_pairs(name[s1_rows], name[rep_rows], blank, cfg.blank_name_k, cfg.min_sim, cfg.char_max_df)
+        proposals.append(("blank_name", q * n_rep + d, s))
+    if cfg.script_k > 0:
+        # romanised Indic names are phonetic ("gaileksi kansaltensi" for Galaxy Consultancy):
+        # their consonant skeletons agree where the char grams do not
+        raw = recs["business_name"].to_numpy()[rep_rows]
+        indic = np.flatnonzero([bool(_HAS_INDIC.search(n)) for n in raw])
+        skel = (recs["name_skel"] + " | " + recs["addr_core"]).to_numpy()
+        q, d, s = _subset_pairs(skel[s1_rows], skel[rep_rows], indic, cfg.script_k, cfg.min_sim, cfg.char_max_df)
+        proposals.append(("script", q * n_rep + d, s))
     q, d = _key_pairs(recs, s1_rows, rep_rows, cfg.max_key_block)
     proposals.append(("key", q * n_rep + d, np.ones(len(q), np.float32)))
 
@@ -323,6 +408,11 @@ def _block_target(recs: pd.DataFrame, index: TextIndex, cfg: BlockingConfig, s1_
     for name, weight in cfg.score_weights.items():
         if weight:
             score += weight * pair_cosine(index.mats[name], li, ri)
+    # the subset channels see what full_char cannot (blank addresses, phonetic spellings), and a
+    # pair several channels agree on is more likely true: on India this lifted recall at 10 per
+    # source from 90.7% to 93.3%
+    score += cfg.agree_weight * np.bitwise_count(mask.astype(np.uint64))
+    score += cfg.channel_weight * np.maximum.reduce([sims["crowd"], sims["blank_name"], sims["script"]])
     rank = _rank_within(q, score)
     keep = rank < cfg.max_per_source if cfg.max_per_source > 0 else np.ones(len(pair), dtype=bool)
     if cfg.max_per_source > 0 and cfg.reverse_k > 0:
