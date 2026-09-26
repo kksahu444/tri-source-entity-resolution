@@ -24,6 +24,8 @@ def main(argv=None):
     ap.add_argument("--out", default="submissions/probe_fr_wrongid/matching_results.tsv")
     ap.add_argument("--test-dir", default="dataset/test")
     ap.add_argument("--base-run", default="0926-073916-submit")
+    ap.add_argument("--validator", default="utils/validate_submission.py")
+    ap.add_argument("--manifest", default="submissions/manifest.csv", help="empty string: do not write")
     args = ap.parse_args(argv)
     T = args.test_dir
     rd = lambda p, cols=None: pd.read_csv(p, sep="\t", dtype=str, keep_default_na=False, usecols=cols)  # default quoting
@@ -47,10 +49,12 @@ def main(argv=None):
     with open(args.out, "rb") as f:
         assert b"\r" not in f.read(), "CRLF in output"
     print(f"French rows replaced: {fr.sum():,}; other rows unchanged: {(~fr).sum():,}")
-    val = subprocess.run([sys.executable, "utils/validate_submission.py", "--matching", args.out,
+    val = subprocess.run([sys.executable, args.validator, "--matching", args.out,
                           "--candidate", "none", "--test-dir", T], capture_output=True, text=True)
     print(val.stdout[-600:])
-    man = "submissions/manifest.csv"
+    man = args.manifest
+    if not man:
+        return
     new = not os.path.exists(man)
     with open(man, "a", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh, lineterminator="\n")
