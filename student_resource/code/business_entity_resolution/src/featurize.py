@@ -36,7 +36,7 @@ FEAT_COLS = ["entity_id", "core", "name_b", "legal", "alt", "addr_b", "addr_core
 def load_block(cfg, split, country):
     """Arrow-backed strings: only the values of candidate pairs are materialised as Python objects."""
     d = block_dir(cfg)
-    q = pd.read_parquet(os.path.join(d, f"{split}_{country}_q.parquet"), columns=FEAT_COLS)
+    q = pd.read_parquet(os.path.join(d, f"{split}_{country}_q.parquet"), columns=FEAT_COLS, dtype_backend="pyarrow")
     r = pd.read_parquet(os.path.join(d, f"{split}_{country}_r.parquet"), columns=FEAT_COLS, dtype_backend="pyarrow")
     pairs = pd.read_parquet(os.path.join(d, f"{split}_{country}_pairs.parquet"))
     return q, r, pairs
@@ -108,7 +108,10 @@ def run(cfg: dict, split: str = "dev") -> dict:
             ch = cheap.pop(c)
         else:
             ch = cheap_features(q, r, pairs)
-            ch["prune_score"] = prune.predict(pr["models"], ch[cols].to_numpy(np.float32))
+            ps = np.empty(len(ch), np.float32)
+            for a in range(0, len(ch), 4_000_000):             # chunked: no full float copy of 30M rows
+                ps[a:a + 4_000_000] = prune.predict(pr["models"], ch.iloc[a:a + 4_000_000][cols].to_numpy(np.float32))
+            ch["prune_score"] = ps
         n = ns.get(c, ns["France"])
         keep = prune.keep_mask(pairs["qi"].to_numpy(), pairs["ri"].to_numpy(), ch["prune_score"].to_numpy(),
                                n, pc["reverse_keep"])

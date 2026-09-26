@@ -21,8 +21,8 @@ from .blocking.tfidf import pair_cos
 from .normalize import skeleton
 
 F32 = np.float32
-CHUNK = 3_000_000
-WORKERS = max(1, min(10, (os.cpu_count() or 2) - 2))
+CHUNK = 1_000_000
+WORKERS = max(1, min(6, (os.cpu_count() or 2) - 2))
 
 
 def _col(df: pd.DataFrame, col: str, idx: np.ndarray) -> np.ndarray:
