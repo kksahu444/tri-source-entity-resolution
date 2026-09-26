@@ -45,20 +45,24 @@ def _p_independent(p):
 
 @njit(cache=True)
 def _expand(pc, p):
+    """K-class count output [P0..P_{K-2}, P_{K-1}+] -> Pcount(s), s = 0..m (Appendix A semantics:
+    open class spread over s >= K-1 by PB(s); mass on impossible counts s > m goes to s = m)."""
     m = len(p)
+    top = len(pc) - 1
     out = np.zeros(m + 1)
-    for s in range(min(3, m + 1)):
+    for s in range(min(top, m + 1)):
         out[s] = pc[s]
-    if m >= 3:
-        pb = _pb(p)[3:]
+    if m >= top:
+        pb = _pb(p)[top:]
         tot = pb.sum()
         if tot > 0:
             for s in range(len(pb)):
-                out[3 + s] = pc[3] * pb[s] / tot
+                out[top + s] += pc[top] * pb[s] / tot
         else:
-            out[3] = pc[3]
+            out[top] += pc[top]
     else:
-        out[m] += pc[3]
+        for s in range(m + 1, len(pc)):
+            out[m] += pc[s]
     return out / out.sum()
 
 

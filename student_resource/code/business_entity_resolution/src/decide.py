@@ -98,16 +98,24 @@ def run(cfg: dict, split: str = "dev") -> dict:
             parts.append((E[c]["qi"] + off, E[c]["p"], E[c]["y"], E[c]["n_true"]))
             off += len(E[c]["n_true"])
         th["pooled"] = two_threshold.tune(*(np.concatenate([x[i] for x in parts]) for i in range(4)))
-        # count model (pooled, no country), cross-fitted on the dev folds
+        # count models (pooled, no country), cross-fitted on the dev folds: K = 4 and the K whose
+        # open-ended class holds <= 5% of dev entities (Appendix A guidance)
         X = pd.concat([_entity_frame(E[c]["qi"], E[c]["p"], E[c]["aux"], len(E[c]["n_true"])) for c in cs], ignore_index=True)
-        yc = np.concatenate([count_model.target(E[c]["qi"], E[c]["y"], len(E[c]["n_true"])) for c in cs])
+        counts = np.concatenate([count_model.counts_in_list(E[c]["qi"], E[c]["y"], len(E[c]["n_true"])) for c in cs])
         fold = np.concatenate([E[c]["fold"] for c in cs])
-        cprob, cmodels, temp = count_model.fit_oof(X, yc, fold, cfg["seed"])
-        info["count_model_temp"] = round(temp, 4)
-        info["count_model_acc"] = round(float((cprob.argmax(1) == yc).mean()), 4)
-        log.info("count model: temp %.3f acc %.4f (%.0fs)", temp, info["count_model_acc"], t())
+        k_auto = count_model.choose_k(counts)
+        info["count_k_auto"] = k_auto
+        cm = {}
+        for k in sorted({4, k_auto}):
+            yk = np.minimum(counts, k - 1)
+            cprob, cmodels, temp = count_model.fit_oof(X, yk, fold, cfg["seed"], k)
+            cm[k] = (cprob, cmodels, temp)
+            info[f"count_K{k}_temp"] = round(temp, 4)
+            info[f"count_K{k}_acc"] = round(float((cprob.argmax(1) == yk).mean()), 4)
+            log.info("count model K=%d: temp %.3f acc %.4f (%.0fs)", k, temp, info[f"count_K{k}_acc"], t())
         # per-entity F for every rule
-        F = {"two_threshold": [], "gfm_indep": [], "gfm_count": [], "ceiling": []}
+        rules = ["two_threshold", "gfm_indep"] + [f"gfm_count_K{k}" for k in cm]
+        F = {r: [] for r in rules + ["ceiling"]}
         nts, ctry, off = [], [], 0
         for c in cs:
             e = E[c]
@@ -116,8 +124,9 @@ def run(cfg: dict, split: str = "dev") -> dict:
             F["two_threshold"].append(per_entity(e["qi"], sel, e["y"], e["n_true"]))
             sel, _ = gfm_rule.select(e["qi"], e["p"], None)
             F["gfm_indep"].append(per_entity(e["qi"], sel, e["y"], e["n_true"]))
-            sel, _ = gfm_rule.select(e["qi"], e["p"], cprob[off:off + n])
-            F["gfm_count"].append(per_entity(e["qi"], sel, e["y"], e["n_true"]))
+            for k, (cprob, _, _) in cm.items():
+                sel, _ = gfm_rule.select(e["qi"], e["p"], cprob[off:off + n])
+                F[f"gfm_count_K{k}"].append(per_entity(e["qi"], sel, e["y"], e["n_true"]))
             F["ceiling"].append(per_entity(e["qi_all"], e["y_all"] == 1, e["y_all"], e["n_true"]))
             nts.append(e["n_true"])
             ctry.append(np.full(n, c))
@@ -126,7 +135,7 @@ def run(cfg: dict, split: str = "dev") -> dict:
         F = {k: np.concatenate(v) for k, v in F.items()}
         nt, ctry = np.concatenate(nts), np.concatenate(ctry)
         comp = {}
-        for rule in ("gfm_indep", "gfm_count"):
+        for rule in rules[1:]:
             g, lo, hi = _paired_gain_ci(F["two_threshold"], F[rule])
             comp[rule] = {"f05": round(float(F[rule].mean()), 5), "gain_vs_tt": round(g, 5),
                           "gain_ci": [round(lo, 5), round(hi, 5)],
@@ -134,9 +143,12 @@ def run(cfg: dict, split: str = "dev") -> dict:
                           "f05_singleton": round(float(F[rule][nt == 0].mean()), 5)}
         chosen = "two_threshold"
         best_gain = 0.0
-        for rule in ("gfm_indep", "gfm_count"):
+        for rule in rules[1:]:
             if comp[rule]["gain_ci"][0] > 0 and comp[rule]["gain_vs_tt"] > best_gain:
                 chosen, best_gain = rule, comp[rule]["gain_vs_tt"]
+        if len(cm) > 1:
+            g, lo, hi = _paired_gain_ci(F["gfm_count_K4"], F[f"gfm_count_K{k_auto}"])
+            info["gain_Kauto_vs_K4"] = {"gain": round(g, 5), "ci": [round(lo, 5), round(hi, 5)]}
         res.update(summary(F[chosen], nt, ctry))
         res["notes"] = json.dumps({
             **info, "rule": chosen, "thresholds": th, "rule_comparison": comp,
@@ -145,7 +157,9 @@ def run(cfg: dict, split: str = "dev") -> dict:
             "oracle_perfect_singleton": round(float(np.where(nt == 0, 1.0, F[chosen]).mean()), 5),
             "all_empty_score": round(float((nt == 0).mean()), 5)})
         prev = pickle.load(open(path, "rb")) if os.path.exists(path) else {}
-        pickle.dump({"iso": iso, "thresholds": th, "rule": chosen, "count_models": cmodels, "count_temp": temp,
+        k_used = int(chosen.split("_K")[1]) if chosen.startswith("gfm_count") else 4
+        pickle.dump({"iso": iso, "thresholds": th, "rule": "gfm_count" if chosen.startswith("gfm_count") else chosen,
+                     "count_K": k_used, "count_models": cm[k_used][1], "count_temp": cm[k_used][2],
                      "b_fr": prev.get("b_fr", 0.0)}, open(path, "wb"))
     else:
         dec = pickle.load(open(path, "rb"))

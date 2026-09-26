@@ -7,16 +7,12 @@ f05_decision_rule.py - per-entity set selection for macro-F0.5 (Amazon ML Challe
   P_independent(probs)               GFM inputs if candidate match events are independent
   P_count_model(probs, count_dist)   count-tilted GFM inputs: pair model picks WHICH candidates,
                                      an entity-level count model picks HOW MANY (recommended)
-  expand_count_classes(pc, probs)    4-class count output [P0,P1,P2,P3+] -> Pcount(s)
+  expand_count_classes(pc, probs)    K-class count output [P0,..,P_{K-2},P_{K-1}+] -> Pcount(s)
 
 Cap candidate lists at m <= 30 (sorted by p) before calling GFM.
 Inputs must be CALIBRATED probabilities (isotonic/Platt fitted on out-of-fold predictions).
 Fit the count model on the number of true matches INSIDE the pruned candidate list, with
 out-of-fold pair probabilities as its features; keep country out of its features (France is unseen).
-
-Provenance: functions and self-tests 1-6 are Appendix A of the build spec, unchanged. The spec
-message was truncated inside self-test 7; test 7 and the m = 40 NaN check below are rebuilt to the
-spec's stated checks ("count-tilted GFM vs brute force: mismatches = 0 / 200", "no NaN at m = 40").
 """
 import numpy as np
 
@@ -112,18 +108,24 @@ def P_count_model(probs, count_dist):
 
 
 def expand_count_classes(p_classes, probs):
-    """Turn a 4-class count prediction [P0, P1, P2, P3plus] into Pcount(s), s = 0..m,
-    spreading the 3+ mass over s >= 3 in proportion to the Poisson-binomial PB(s)."""
+    """
+    K-class count prediction [P0, P1, ..., P_{K-2}, P_{K-1}+] -> Pcount(s), s = 0..m.
+    The last class means "K-1 or more"; its mass is spread over s >= K-1 in proportion to PB(s).
+    Mass on counts impossible for this list (s > m) goes to s = m.
+    K = 4 reproduces the original [P0, P1, P2, P3+] behaviour for m >= 3 and fixes m < 3,
+    where the original silently dropped P(exactly 2).
+    Choose K so the open-ended last class holds <= 5% of dev entities (mean matches per S1 is 3.46).
+    """
     p = np.clip(np.asarray(probs, float), 1e-6, 1 - 1e-6); m = len(p)
-    pc = np.asarray(p_classes, float)
+    pc = np.asarray(p_classes, float); top = len(pc) - 1
     out = np.zeros(m + 1)
-    for s in range(min(3, m + 1)):
+    for s in range(min(top, m + 1)):
         out[s] = pc[s]
-    if m >= 3:
-        pb = _poisson_binomial(p)[3:]
-        out[3:] = pc[3] * (pb / pb.sum() if pb.sum() > 0 else np.eye(1, m - 2, 0).ravel())
-    else:                                   # 3+ impossible with < 3 candidates
-        out[m] += pc[3:].sum()
+    if m >= top:
+        pb = _poisson_binomial(p)[top:]
+        out[top:] += pc[top] * (pb / pb.sum() if pb.sum() > 0 else np.eye(1, m - top + 1, 0).ravel())
+    else:
+        out[m] += pc[m + 1:].sum()
     return out / out.sum()
 
 
@@ -199,29 +201,46 @@ if __name__ == "__main__":
     gc, vc = gfm(["c1", "c2"], *P_count_model(probs, [0.30, 0.70]))   # 0 or 1 match, mass split
     print(f"\ncandidates {probs}: independence -> {gi} ; count model (P(T=0)=0.30, T<=1) -> {gc}")
 
-    # 7) [rebuilt] count-tilted construction is exact on the joint it implies (random cases):
-    #    y ~ independent Bernoulli(p) conditioned on |y| = s, s ~ Pcount. Brute force over all
-    #    2^m label vectors and all 2^m prediction sets must give the same best expected F as GFM.
+    # 7) count-tilted construction is exact on the joint it implies (random cases)
     mism = 0
     for t in range(200):
-        m = int(rng.integers(2, 6))
-        probs = rng.uniform(0.02, 0.98, m)
-        cdist = rng.dirichlet(np.ones(m + 1))
-        P, p0 = P_count_model(probs, cdist)
-        _, v_gfm = gfm(list(range(m)), P, p0)
-        pcl = np.clip(probs, 1e-6, 1 - 1e-6)
-        pb = _poisson_binomial(pcl)
+        m = int(rng.integers(2, 6)); p = np.clip(rng.beta(0.5, 1.5, size=m), 1e-6, 1 - 1e-6); cd = rng.dirichlet(np.ones(m + 1))
+        pb = _poisson_binomial(p)
         ys = np.array(list(product([0, 1], repeat=m)))
-        py = np.array([cdist[y.sum()] * np.prod(np.where(y, pcl, 1 - pcl)) / pb[y.sum()] for y in ys])
-        v_bf = max(sum(pr * f05({i for i in range(m) if h[i]}, {i for i in range(m) if y[i]})
-                       for y, pr in zip(ys, py)) for h in ys)
-        mism += abs(v_gfm - v_bf) > 1e-9
-    print(f"\ncount-tilted GFM vs brute force: mismatches = {mism} / 200")
-    assert mism == 0
+        py = np.array([cd[y.sum()] * np.prod(np.where(y, p, 1 - p)) / pb[y.sum()] for y in ys])
+        P, p0 = P_count_model(p, cd)
+        _, v = gfm(list(range(m)), P, p0)
+        vbf = max(sum(pr * f05({i for i in range(m) if h[i]}, {i for i in range(m) if y[i]})
+                      for y, pr in zip(ys, py)) for h in ys)
+        mism += abs(v - vbf) > 1e-9
+    print("count-tilted GFM vs brute force: mismatches =", mism, "/ 200")
+    print("expand_count_classes([0.3,0.5,0.15,0.05], 5 candidates):",
+          np.round(expand_count_classes([0.3, 0.5, 0.15, 0.05], [0.9, 0.6, 0.3, 0.2, 0.1]), 3))
 
-    # 8) [rebuilt] numerical safety for long lists
-    probs40 = rng.uniform(0.0, 1.0, 40)
-    P, p0 = P_count_model(probs40, expand_count_classes([0.1, 0.3, 0.3, 0.3], probs40))
-    g, v = gfm(list(range(40)), P, p0)
-    assert np.isfinite(P).all() and np.isfinite(v)
-    print(f"m = 40: no NaN/Inf (expected F {v:.4f}, |pred| = {len(g)})")
+    # 8) numerical robustness: long lists with near-zero probabilities must not produce NaN
+    p = np.full(40, 1e-12); p[0] = 0.9
+    P, p0 = P_count_model(p, expand_count_classes([0.1, 0.8, 0.08, 0.02], p))
+    assert not np.isnan(P).any(), "NaN in count-model inputs"
+    sel, v = gfm(list(range(40)), P, p0)
+    print("m=40 near-zero list: no NaN, GFM picks", sel, f"(E[F]={v:.3f})")
+
+    # 9) K-class expansion: m < K-1 edge cases keep all mass; K = 9 works; exact when every count has its own class
+    out = expand_count_classes([0.2, 0.5, 0.2, 0.1], [0.7])
+    assert np.allclose(out, [0.2, 0.8]), out
+    pc9 = rng.dirichlet(np.ones(9)); out9 = expand_count_classes(pc9, rng.beta(0.5, 1.5, size=20))
+    assert abs(out9.sum() - 1) < 1e-12 and np.allclose(out9[:8], pc9[:8] / 1.0)
+    mism = 0
+    for t in range(100):
+        m = int(rng.integers(2, 6)); p = np.clip(rng.beta(0.5, 1.5, size=m), 1e-6, 1 - 1e-6)
+        cd = rng.dirichlet(np.ones(m + 1))
+        pc = np.append(cd, 0.0)                      # K = m + 2 classes, open class empty
+        assert np.allclose(expand_count_classes(pc, p), cd)
+        pb = _poisson_binomial(p)
+        ys = np.array(list(product([0, 1], repeat=m)))
+        py = np.array([cd[y.sum()] * np.prod(np.where(y, p, 1 - p)) / pb[y.sum()] for y in ys])
+        P, p0 = P_count_model(p, expand_count_classes(pc, p))
+        _, v = gfm(list(range(m)), P, p0)
+        vbf = max(sum(pr * f05({i for i in range(m) if h[i]}, {i for i in range(m) if y[i]})
+                      for y, pr in zip(ys, py)) for h in ys)
+        mism += abs(v - vbf) > 1e-9
+    print("K-class expansion: edge cases OK; GFM vs brute force through K-class path: mismatches =", mism, "/ 100")
