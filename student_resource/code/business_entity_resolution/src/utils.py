@@ -77,7 +77,13 @@ def append_run_log(cfg: dict, row: dict) -> None:
     base.update(row)
     extra = {k: v for k, v in base.items() if k not in RUN_LOG_COLUMNS}
     if extra:
-        base["notes"] = (str(base.get("notes", "")) + " " + json.dumps(extra, default=str)).strip()
+        notes = str(base.get("notes", "") or "")
+        try:
+            merged = json.loads(notes) if notes.strip().startswith("{") else {"text": notes} if notes else {}
+        except json.JSONDecodeError:
+            merged = {"text": notes}
+        merged.update(extra)
+        base["notes"] = json.dumps(merged, default=str)
     with open(path, "a", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=RUN_LOG_COLUMNS, extrasaction="ignore")
         if new:

@@ -14,6 +14,7 @@ STAGES = {
     "block": "src.blocking.union",
     "features": "src.featurize",
     "stack": "src.stack",
+    "stackb": "src.stack_b",
     "decide": "src.decide",
     "loco": "src.france",
     "submit": "src.submit",

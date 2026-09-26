@@ -64,8 +64,9 @@ def run(cfg: dict, split: str = "dev") -> dict:
         pickle.dump({"models": models, "cols": cols, "iters": iters}, open(model_path, "wb"))
         for c in cs:
             m = df["_c"].to_numpy() == c
-            pd.DataFrame({"qi": df["qi"][m], "ri": df["ri"][m], "y": df["y"][m], "p": oof[m]}).to_parquet(
-                os.path.join(pd_, f"dev_{c}.parquet"), index=False)
+            out = pd.DataFrame({"qi": df["qi"][m], "ri": df["ri"][m], "y": df["y"][m], "p": oof[m]})
+            out.to_parquet(os.path.join(pd_, f"dev_{c}.parquet"), index=False)
+            out.to_parquet(os.path.join(pd_, f"dev_{c}_stageA.parquet"), index=False)
         info = {"iters": iters, "n_pairs": len(df), "pos_rate": round(float(y.mean()), 4),
                 "top_features": {k: round(v, 4) for k, v in imp.head(25).items()}}
         json.dump({"importance": imp.round(5).to_dict(), **info}, open(os.path.join(cfg["paths"]["runs"], "stageA_dev.json"), "w"), indent=1)
@@ -76,8 +77,9 @@ def run(cfg: dict, split: str = "dev") -> dict:
             df = pd.read_parquet(os.path.join(fd, f"test_{c}.parquet"))
             X = df[st["cols"]].to_numpy(np.float32)
             p = np.mean([m.predict(X, num_iteration=m.best_iteration) for m in st["models"]], axis=0)
-            pd.DataFrame({"qi": df["qi"], "ri": df["ri"], "p": p.astype(np.float32)}).to_parquet(
-                os.path.join(pd_, f"test_{c}.parquet"), index=False)
+            out = pd.DataFrame({"qi": df["qi"], "ri": df["ri"], "p": p.astype(np.float32)})
+            out.to_parquet(os.path.join(pd_, f"test_{c}.parquet"), index=False)
+            out.to_parquet(os.path.join(pd_, f"test_{c}_stageA.parquet"), index=False)
             info[c] = len(df)
             log.info("stage A test %s: %s pairs (%.0fs)", c, f"{len(df):,}", t())
     return {"stage": "stack", "runtime_s": t(), "notes": json.dumps(info)}
