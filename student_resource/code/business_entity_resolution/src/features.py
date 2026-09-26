@@ -22,7 +22,7 @@ from .normalize import skeleton
 
 F32 = np.float32
 CHUNK = 1_000_000
-WORKERS = max(1, min(6, (os.cpu_count() or 2) - 2))
+WORKERS = int(os.environ.get("ER_WORKERS", max(1, min(6, (os.cpu_count() or 2) - 2))))
 
 
 def _col(df: pd.DataFrame, col: str, idx: np.ndarray) -> np.ndarray:

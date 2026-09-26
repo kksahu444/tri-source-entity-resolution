@@ -1,0 +1,3 @@
+{"id": "aditya103856/amlc26-pipeline", "title": "amlc26-pipeline", "code_file": "run_on_kaggle.py", "language": "python",
+ "kernel_type": "script", "is_private": true, "enable_gpu": true, "enable_internet": true,
+ "dataset_sources": ["aditya103856/amlc26-er-data", "aditya103856/amlc26-er-code"], "competition_sources": [], "kernel_sources": []}
