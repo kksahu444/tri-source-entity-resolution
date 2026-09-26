@@ -2,7 +2,7 @@
 
 Input dataset (private, attached as a data source): ce_train.parquet from `python -m src.ce_pairs`
 (s1_id, cand_id, label, val, text_a, text_b), and any number of score_<name>.parquet (s1_id, cand_id)
-with texts_<name>.parquet (entity_id, text): the pruned dev/test pairs from `python -m src.ce_export`.
+with texts_<name>.parquet (entity_id, text): the pruned dev/test pairs from `python -m src.ce_lane_export`.
 Texts are stored once per record, not per pair, and pairs are scored in chunks of CHUNK.
 If the dataset holds no ce_train.parquet, the model comes from a previous version of this kernel
 (ce_model/ in its output, attached as a kernel source) and only scoring runs.

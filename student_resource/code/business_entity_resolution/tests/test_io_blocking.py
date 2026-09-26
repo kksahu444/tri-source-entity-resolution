@@ -89,7 +89,6 @@ def test_reverse_name_channel():
     assert all((qi[ri == j]).size <= 3 for j in (0, 1, 2))
 
 
-
 def test_c7_forward_pass_survives_query_competition():
     from src.blocking.union import block_country
     n = 60
@@ -110,6 +109,7 @@ def test_c7_forward_pass_survives_query_competition():
     bc["reverse_empty"]["forward_k"] = 2
     pairs, _ = block_country({"blocking": bc}, q, r)
     assert {(1, n), (1, n + 1)} <= c7(pairs)
+
 
 def test_crowd_and_key_channels():
     qk = pd.Series(["a b", "c", ""])

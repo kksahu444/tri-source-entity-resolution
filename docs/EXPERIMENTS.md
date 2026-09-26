@@ -19,6 +19,17 @@ Rules:
 
 ## Leaderboard submissions (5 per day)
 
-| tag | day | commit | OOF | public LB | decision | notes |
-|---|---|---|---|---|---|---|
-| sub/d1-1 | 1 | | | | | baseline |
+Submissions come from the pipeline under `student_resource/code/business_entity_resolution/` (origin/adi).
+Its per-run numbers are in `student_resource/runs/run_log.csv` (iteration 3: `runs/kaggle_iter3/run_log.csv`)
+and the uploaded files in `student_resource/submissions/manifest.csv`. Day 1 = 25 Sep. Tags are proposed,
+not pushed yet.
+
+| tag | day | commit | run_id | config | OOF macro F0.5 | public LB | decision | ran by | notes |
+|---|---|---|---|---|---|---|---|---|---|
+| sub/d2-1 | 2 | 0beb90e (code 69f4c91) | 0926-073916-submit | config.yaml (hash 1087ee4653) | 0.97143 [0.97114, 0.97170] (`0926-032111-decide`) | 0.960 (2 decimals) | GFM + count model | Aditya | upload 1, iteration 1: C1+C2+C5 blocking, pruner N=8, stage A LightGBM, b_FR = 0; 25,722,619 candidate pairs; acceptance check pass (run after the fact) |
+| sub/d2-2 | 2 | 341091a | probe-of-0926-073916-submit | - | - | 0.821 | - | Aditya | diagnostic: upload 1 with French ids scrambled, F_FR = 0.928 (`0926-144305-probe`); never a final candidate |
+| sub/d2-3 | 2 | 3334842 (Kaggle run, code commit not logged) | kaggle-0926-121628-submit | config_v3.yaml + XGBoost CUDA (hash b96fc5c751) | 0.98049 [0.98025, 0.98073] (`kaggle-0926-102147-decide`) | 0.938 | GFM, independent | Aditya | upload 2, iteration 3: + C7, support/generator/consistency features, stage B; over-links test decoys (`runs/decoy_shift.md`); acceptance check fail |
+
+Final ranking uses the private score of the best public upload (organiser answers 25 Sep 18:36, 26 Sep 12:56
+and 17:03), so as of 27 Sep 00:45 upload 1 is the one that counts; a later upload counts only if it beats 0.960
+public.

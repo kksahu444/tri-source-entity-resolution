@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src import ce_export
+from src import ce_lane_export as ce_export
 
 
 def _run(tmp_path):

@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 from rapidfuzz import fuzz
-from rapidfuzz.distance import JaroWinkler
+from rapidfuzz.distance import JaroWinkler, Levenshtein
 from rapidfuzz.process import cpdist
 from sklearn.feature_extraction.text import CountVectorizer
 
@@ -22,7 +22,7 @@ from .normalize import skeleton
 
 F32 = np.float32
 CHUNK = 1_000_000
-WORKERS = max(1, min(6, (os.cpu_count() or 2) - 2))
+WORKERS = int(os.environ.get("ER_WORKERS", max(1, min(6, (os.cpu_count() or 2) - 2))))
 
 
 def _col(df: pd.DataFrame, col: str, idx: np.ndarray) -> np.ndarray:
@@ -76,7 +76,7 @@ BLOCK_FEATS = ["in_c1", "in_c2", "in_c5a", "in_c5b", "c1_rank", "crowd_size", "c
 
 def cheap_features(q: pd.DataFrame, r: pd.DataFrame, pairs: pd.DataFrame) -> pd.DataFrame:
     qi, ri = pairs["qi"].to_numpy(), pairs["ri"].to_numpy()
-    f = pairs[BLOCK_FEATS + [c for c in ("in_c6", "in_c7") if c in pairs.columns]].astype(F32).copy()
+    f = pairs[BLOCK_FEATS + [c for c in ("in_c6", "in_c7", "in_c8") if c in pairs.columns]].astype(F32).copy()
     f["src3"] = (pairs["src"].to_numpy() == 3).astype(F32)
     cols = {k: [] for k in ("n_jw", "n_tset", "house_eq", "house_conflict", "addr_r_empty")}
     for s in range(0, len(qi), CHUNK):
@@ -257,7 +257,8 @@ def gen_features(f: pd.DataFrame, q, r, qi, ri) -> None:
     """Generic features aimed at observed noise mechanisms (no dataset-specific word lists):
     website-style names (space-free containment), house numbers with dropped/changed digits or ranges,
     and agreement with the S1's best other candidate (anchor), a non-chaining consistency check."""
-    cols = {k: [] for k in ("cmp_sub", "cmp_partial", "house_sub", "house_reldiff", "house_in_rnums")}
+    cols = {k: [] for k in ("cmp_sub", "cmp_partial", "house_sub", "house_reldiff", "house_in_rnums", "house_lev",
+                            "house_off")}
     for s in range(0, len(qi), CHUNK):
         a, b = qi[s:s + CHUNK], ri[s:s + CHUNK]
         cq = np.array([x.replace(" ", "") for x in _col(q, "core", a)], dtype=object)
@@ -267,17 +268,26 @@ def gen_features(f: pd.DataFrame, q, r, qi, ri) -> None:
                                             for x, y, z in zip(cq, nr, cr)), bool, len(cq)).astype(F32))
         cols["cmp_partial"].append(_sim(cq, nr, fuzz.partial_ratio))
         hq, hr = _col(q, "house", a), _col(r, "house", b)
+        cols["house_lev"].append(np.where((hq != "") & (hr != ""),
+                                          cpdist(hq, hr, scorer=Levenshtein.distance, workers=-1), -1).astype(F32))
         cols["house_sub"].append(np.fromiter(((x != y) and bool(x) and bool(y) and (x in y or y in x)
                                               for x, y in zip(hq, hr)), bool, len(hq)).astype(F32))
         nq, nr_ = _house_num(hq), _house_num(hr)
         with np.errstate(invalid="ignore", divide="ignore"):
             rel = np.abs(nq - nr_) / np.maximum(np.maximum(nq, nr_), 1)
         cols["house_reldiff"].append(np.where(np.isnan(rel), -1, rel).astype(F32))
+        # signed offset (record - S1): test decoy entities sit at +1..+21 (97% positive), while house noise on
+        # true records drops or swaps digits (runs/decoy_shift.md)
+        off = np.clip(nr_ - nq, -1e5, 1e5)
+        cols["house_off"].append(np.where(np.isnan(off), 1e6, off).astype(F32))      # 1e6 = a house number missing
         rn = _col(r, "nums", b)
         cols["house_in_rnums"].append(np.fromiter((bool(x) and x in set(y.split()) for x, y in zip(hq, rn)),
                                                   bool, len(hq)).astype(F32))
     for k, v in cols.items():
         f[k] = np.concatenate(v) if v else np.zeros(0, F32)
+    # how many candidates of the S1 sit at its exact house number (a decoy entity sits beside them)
+    exact = (f["house_lev"].to_numpy() == 0).astype(float)
+    f["q_n_exact_house"] = np.bincount(qi, weights=exact, minlength=int(qi.max()) + 1 if len(qi) else 0)[qi].astype(F32)
     # anchor agreement: the S1's best other candidate by blocking score
     c1 = f["c1_score"].to_numpy()
     order = np.lexsort((-c1, qi))

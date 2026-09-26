@@ -1,0 +1,47 @@
+{
+ "France": {
+  "t_vectorize": 17.6,
+  "rare_df_cap": 20000,
+  "t_c1": 150.6,
+  "t_c2": 156.7,
+  "c5a_skipped_q": 1141,
+  "c5b_skipped_q": 105256,
+  "t_c5": 168.8,
+  "c7_records": 43078,
+  "t_c7": 179.6,
+  "t_union": 187.3,
+  "pairs": 9729352,
+  "n_q": 259452,
+  "n_r": 1434993
+ },
+ "India": {
+  "t_vectorize": 60.1,
+  "rare_df_cap": 23587,
+  "t_c1": 994.9,
+  "t_c2": 1019.5,
+  "c5a_skipped_q": 261537,
+  "c5b_skipped_q": 177441,
+  "t_c5": 1064.3,
+  "c7_records": 112229,
+  "t_c7": 1174.5,
+  "t_union": 1206.9,
+  "pairs": 31249504,
+  "n_q": 809986,
+  "n_r": 4717565
+ },
+ "US": {
+  "t_vectorize": 46.4,
+  "rare_df_cap": 20000,
+  "t_c1": 720.9,
+  "t_c2": 735.6,
+  "c5a_skipped_q": 0,
+  "c5b_skipped_q": 1227,
+  "t_c5": 766.3,
+  "c7_records": 110424,
+  "t_c7": 887.6,
+  "t_union": 912.1,
+  "pairs": 23275353,
+  "n_q": 663106,
+  "n_r": 3817031
+ }
+}

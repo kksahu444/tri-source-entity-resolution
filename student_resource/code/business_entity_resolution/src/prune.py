@@ -6,9 +6,9 @@ The pruned set is exactly what candidate_pairs.tsv holds and what the final mode
 """
 from __future__ import annotations
 
-import lightgbm as lgb
 import numpy as np
 
+from . import gbm
 from .features import _group_stats
 
 PARAMS = {"objective": "binary", "learning_rate": 0.1, "num_leaves": 63, "min_data_in_leaf": 200,
@@ -17,23 +17,22 @@ PARAMS = {"objective": "binary", "learning_rate": 0.1, "num_leaves": 63, "min_da
 ROUNDS = 300
 
 
-def train_oof(X, y, fold, seed, neg_keep=0.3):
+def train_oof(X, y, fold, seed, neg_keep=0.3, cfg=None):
     """Returns (oof scores, list of fold models). Negatives subsampled for training only."""
     rng = np.random.default_rng(seed)
     oof = np.zeros(len(y), np.float32)
     models = []
-    params = {**PARAMS, "seed": seed}
     for f in sorted(set(fold.tolist()) - {-1}):
         tr = (fold != f) & ((y == 1) | (rng.random(len(y)) < neg_keep))
         va = fold == f
-        m = lgb.train(params, lgb.Dataset(X[tr], y[tr], free_raw_data=True), ROUNDS)
-        oof[va] = m.predict(X[va], num_threads=0)
+        m = gbm.train_binary(cfg or {}, X[tr], y[tr], ROUNDS, seed=seed, lgb_params=PARAMS)
+        oof[va] = m.predict(X[va])
         models.append(m)
     return oof, models
 
 
 def predict(models, X):
-    return np.mean([m.predict(X, num_threads=0) for m in models], axis=0).astype(np.float32)
+    return np.mean([gbm.predict(m, X) for m in models], axis=0).astype(np.float32)
 
 
 def choose_n(qi, score, y, n_true_total, pc_tol, n_max=60):
