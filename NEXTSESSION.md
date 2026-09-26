@@ -64,8 +64,8 @@ all-dev model for test; C7 on, C6 off as of 771695b).
    each empty-address record takes its top-10 S1s. That recall depends on how many S1s compete, and a
    test run has ~3x the S1s of the dev universe. Measured on India (`student_resource/runs/c7_scale.md`):
    reverse PC on blank-address targets 0.90 on dev but 0.77 with a test-sized pool; adding the forward
-   pass (each S1 takes its top-5 empty-address records) gives 0.90 at test size. US: reverse 0.80 at
-   test size, forward 0.84. Code is on main, off by default: `reverse_empty.forward_k: 5`. Dev OOF will
+   pass (each S1 takes its top-5 empty-address records) gives 0.90 at test size. US: reverse 0.89 on dev,
+   0.81 at test size, 0.88 with both. Code is on main, off by default: `reverse_empty.forward_k: 5`. Dev OOF will
    not show this gain, because on dev the reverse direction has not lost it yet.
    My earlier forward-only port (`blocking-ports`, config_v4) is superseded and not merged.
    My legal-typo rules are not ported: the translit dictionary already maps `limitet`, `praibhet`,
