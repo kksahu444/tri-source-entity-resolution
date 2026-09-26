@@ -3,7 +3,11 @@
 Handoff for teammates and for any fresh Claude/Codex session after a context reset. Read this
 first, then `CLAUDE.md`. Update the "State" and "Open items" sections before you stop working.
 
-Last updated: 26 Sep 2026, afternoon IST, by Ashutosh (blocking lane).
+Last updated: 26 Sep 2026, 13:20 IST, by Ashutosh (blocking lane).
+
+Git rule: nobody but Aditya pushes to `main`. Everyone else works on their own branch, commits small
+and often, and pushes the branch. Changes to Aditya's pipeline go on a branch off `origin/main` for
+him to review and merge.
 
 ## Where submissions come from
 
@@ -56,14 +60,18 @@ all-dev model for test; `REBLOCK=1` adds the C6 second-hop channel).
    data, which is what the rulings ban. Name it in the methodology compliance section.
 6. **Leak check 7.0-8.6% by city grouping: accept.** Grouping by state only drops it to 5.6-6.1%,
    the cause is name overlap, and no feature carries identity. Note it in the methodology.
-7. **Ports from my blocking lane, only with a measured gain on Aditya's dev union PC:**
-   - blank-address name channel (name core vs records with empty address): 0.37% of true pairs found
-     only by this channel in my runs;
-   - house-number + city key (`#:{n}|{city}`);
-   - legal-form typo and Indic legal-form normalisation (`limitet`, `praivet`, `elaelapi`, `pra li`,
-     fuzzy "private" before "ltd"), affix stripping (`mr`, `smt`, `sri`, ...).
-   Each goes in as a branch off `origin/main` for Aditya to review. Nothing lands after the 27 Sep
-   code freeze (16:00 IST).
+7. **Ports from my blocking lane: only C7 goes forward.** Branch `blocking-ports` (off origin/main,
+   2 commits) adds C7, name TF-IDF against blank-address records, off unless `blocking.k_blank > 0`,
+   and `config_v4.yaml` = v3 + C7. Measured on a 3% dev sample with Aditya's own blocking
+   (`student_resource/runs/c7_bench.md` on that branch):
+   - US union PC 0.9736 -> 0.9842, India 0.9422 -> 0.9517, about +4.5 union cands/S1;
+   - blank-address targets are 3.8-5.1% of true pairs, and their PC goes from ~0.6 to ~0.84.
+   Not measured yet: PC after the pruner and OOF F0.5 (needs a features + stack run on config_v4).
+   Dropped after checking: my legal-typo rules. Aditya's translit dictionary already maps `limitet`,
+   `praibhet`, `elelpi`, `li`, `pra` to ltd/pvt/llp. House number + city key and affix stripping:
+   too small to be worth a change this late.
+8. **C6 is not on in iteration 3.** `config_v3.yaml` has no `blocking.second_hop` entry, so
+   `REBLOCK=1 iter3_chain.sh` blocks without C6 although the chain comment says it is enabled.
 
 ## Open items
 
@@ -73,14 +81,15 @@ all-dev model for test; `REBLOCK=1` adds the C6 second-hop channel).
 | 2 | Log upload 1 public score (0.960) against run `0926-073916-submit` in `student_resource/submissions/manifest.csv` | Aditya | open |
 | 3 | Iteration 2 test file, upload 2, log OOF + LB | Aditya | running |
 | 4 | Iteration 3 chain | Aditya | queued behind iteration 2 |
-| 5 | Port items from decision 7 into his blocking on a branch, measure dev union PC | Ashutosh | next |
+| 5 | C7 port on `blocking-ports`, dev union PC measured | Ashutosh | done; needs Aditya's review, then a features + stack run on config_v4 for OOF |
+| 5b | Decide on C6 for iteration 3 (config_v3 lacks `second_hop`) | Aditya | open |
 | 6 | Methodology doc (`docs_draft/Documentation_draft.md` in his tree): compliance section with decisions 1, 5, 6 | unassigned | open |
 | 7 | Final zip via `python -m src.package --team <TEAM>`, README check on a small slice, ablation tables (`python -m src.ablate`) | unassigned | 27 Sep |
-| 8 | Commit 4ee3179 deleted the tracked `student_resource` zip. Restore from `337ca16` if that was not intended | Ashutosh | check |
+| 8 | Zip deleted in 4ee3179 | Ashutosh | restored on blocking-v2 (ae8b38a) |
 
-## My branch (`blocking-v2`), uncommitted work
+## My branch (`blocking-v2`)
 
-Everything below is in the working tree, not committed yet:
+Committed and pushed (feb5c80..):
 
 - `blocking.py`: hashed TF-IDF (2^22 features, two passes, 500k-row chunks in parallel),
   chunked top-k via `sparse_dot_topn`, blank_name and script channels, number+city key,
