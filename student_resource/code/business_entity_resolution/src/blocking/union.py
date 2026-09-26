@@ -171,6 +171,15 @@ def block_country(cfg, q: pd.DataFrame, r: pd.DataFrame) -> tuple[pd.DataFrame, 
         info["c6_anchors"] = int(anc.sum())
         info["t_c6"] = t()
         log.info("  C6: %s pairs from %s anchors (%.0fs)", f"{len(c6q):,}", f"{anc.sum():,}", t())
+    blank = np.flatnonzero((r["addr_core"] == "").to_numpy())
+    if bc.get("k_blank", 0) and len(blank):
+        # C7: records without an address only reach C1 through the name half (score <= 0.5) and have
+        # no C5 key; 4.3% of train true pairs point at one. Name TF-IDF against those records alone.
+        bq, bl, _ = topk(qn, rn[blank].T.tocsr(), bc["k_blank"], threshold=bc.get("blank_min_cos", 0.3),
+                         chunk=bc["query_chunk"])
+        chans["c7"] = (bq, blank[bl].astype(np.int32))
+        info["t_c7"] = t()
+        log.info("  C7: %s pairs against %s blank-address records (%.0fs)", f"{len(bq):,}", f"{len(blank):,}", t())
     all_keys = np.unique(np.concatenate([a.astype(np.int64) * n_r + b for a, b in chans.values()]))
     pairs = pd.DataFrame({"qi": (all_keys // n_r).astype(np.int32), "ri": (all_keys % n_r).astype(np.int32)})
     for name, (a, b) in chans.items():
@@ -218,6 +227,9 @@ def completeness(pairs: pd.DataFrame, q: pd.DataFrame, r: pd.DataFrame, gt: pd.D
     b = n_true.reindex(g["s1_id"]).clip(upper=3).to_numpy()
     for v in (1, 2, 3):
         out[f"PC_union_bucket{v}{'+' if v == 3 else ''}"] = round(float(found[b == v].mean()), 5)
+    blank = r["addr_core"].to_numpy()[tr] == ""
+    out["share_blank_addr"] = round(float(blank.mean()), 5)
+    out["PC_union_blank_addr"] = round(float(found[blank].mean()), 5)
     out["cands_per_s1"] = round(len(pairs) / len(q), 2)
     out["RR"] = round(1 - len(pairs) / (len(q) * len(r)), 7)
     # upper bound: share of queries whose true set is fully retrieved

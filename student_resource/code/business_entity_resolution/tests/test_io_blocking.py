@@ -87,3 +87,20 @@ def test_crowd_and_key_channels():
     assert sorted(ri[qi == 0].tolist()) == [0, 1, 2] and (qi == 1).sum() == 10 and (qi == 2).sum() == 0
     qi, ri, skipped = key_channel(qk, rk, cap=10)
     assert set(qi.tolist()) == {0} and skipped == 1
+
+
+def test_blank_address_channel():
+    from src.blocking.union import block_country
+    n = 60
+    r = pd.DataFrame({"entity_id": [f"S2-{i}" for i in range(n + 2)],
+                      "core": [f"vendor{i:03d} mart" for i in range(n)] + ["zylofonic traderz"] * 2,
+                      "addr_core": [f"{i} lane{i % 7} pune" for i in range(n)] + ["", ""],
+                      "house": [str(i) for i in range(n)] + ["", ""], "street": [f"lane{i % 7}" for i in range(n)] + ["", ""],
+                      "city": ["pune"] * n + ["", ""], "src": np.int8(2)})
+    q = pd.DataFrame({"entity_id": ["S1-0"], "core": ["zylophonic traders"], "addr_core": ["12 mg road pune"],
+                      "house": ["12"], "street": ["mg"], "city": ["pune"], "src": np.int8(1)})
+    bc = {"k_tfidf": 30, "crowd_cap": 10, "key_block_cap": 200, "key_keep": 10, "query_chunk": 100, "c1_generate": 100}
+    pairs, _ = block_country({"blocking": bc}, q, r)
+    assert "in_c7" not in pairs.columns
+    pairs, info = block_country({"blocking": {**bc, "k_blank": 5}}, q, r)
+    assert set(pairs.loc[pairs["in_c7"] == 1, "ri"]) == {n, n + 1}
