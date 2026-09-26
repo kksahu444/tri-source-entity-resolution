@@ -172,7 +172,15 @@ def block_country(cfg, q: pd.DataFrame, r: pd.DataFrame) -> tuple[pd.DataFrame, 
         # error analysis found 59% of the blocking loss in entities with such a missed record.
         emp = np.flatnonzero(r["addr_core"].to_numpy() == "")
         if len(emp):
-            chans["c7"] = reverse_name_channel(emp, rn, qn, rv.get("k", 10), rv.get("min_cos", 0.3), bc["query_chunk"])
+            c7q, c7r = reverse_name_channel(emp, rn, qn, rv.get("k", 10), rv.get("min_cos", 0.3), bc["query_chunk"])
+            if rv.get("forward_k", 0):
+                # A record's top-k S1s depend on how many S1s compete: the dev universe holds ~30% of the
+                # queries test has, so reverse PC on dev is optimistic (runs/c7_scale.md). The forward
+                # direction searches the same record pool in dev and test.
+                fq, fr, _ = topk(qn, rn[emp].T.tocsr(), rv["forward_k"], threshold=rv.get("min_cos", 0.3),
+                                 chunk=bc["query_chunk"])
+                c7q, c7r = np.concatenate([c7q, fq.astype(np.int32)]), np.concatenate([c7r, emp[fr].astype(np.int32)])
+            chans["c7"] = (c7q, c7r)
         info["c7_records"] = int(len(emp))
         info["t_c7"] = t()
         log.info("  C7: %s pairs from %s empty-address records (%.0fs)", f"{len(chans.get('c7', ([],))[0]):,}",
