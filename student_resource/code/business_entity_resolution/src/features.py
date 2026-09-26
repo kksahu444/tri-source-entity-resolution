@@ -197,7 +197,7 @@ def _string_chunk(q, r, qi, ri, pool) -> dict:
 
 
 def full_features(q: pd.DataFrame, r: pd.DataFrame, pairs: pd.DataFrame, cheap: pd.DataFrame,
-                  support: bool = False) -> pd.DataFrame:
+                  support: bool = False, gen: bool = False) -> pd.DataFrame:
     qi, ri = pairs["qi"].to_numpy(), pairs["ri"].to_numpy()
     f = cheap.copy()
     chunks = []
@@ -240,7 +240,67 @@ def full_features(q: pd.DataFrame, r: pd.DataFrame, pairs: pd.DataFrame, cheap: 
     f["rev_n_best_gap"] = (rmax - nb).astype(F32)
     if support:
         support_features(f, q, r, qi, ri)
+    if gen:
+        gen_features(f, q, r, qi, ri)
     return f
+
+
+def _house_num(h: np.ndarray) -> np.ndarray:
+    out = np.full(len(h), np.nan)
+    for i, x in enumerate(h):
+        if x and len(x) <= 9:
+            out[i] = float(x)
+    return out
+
+
+def gen_features(f: pd.DataFrame, q, r, qi, ri) -> None:
+    """Generic features aimed at observed noise mechanisms (no dataset-specific word lists):
+    website-style names (space-free containment), house numbers with dropped/changed digits or ranges,
+    and agreement with the S1's best other candidate (anchor), a non-chaining consistency check."""
+    cols = {k: [] for k in ("cmp_sub", "cmp_partial", "house_sub", "house_reldiff", "house_in_rnums")}
+    for s in range(0, len(qi), CHUNK):
+        a, b = qi[s:s + CHUNK], ri[s:s + CHUNK]
+        cq = np.array([x.replace(" ", "") for x in _col(q, "core", a)], dtype=object)
+        nr = np.array([x.replace(" ", "") for x in _col(r, "name_b", b)], dtype=object)
+        cr = np.array([x.replace(" ", "") for x in _col(r, "core", b)], dtype=object)
+        cols["cmp_sub"].append(np.fromiter(((len(x) >= 4 and x in y) or (len(z) >= 4 and z in x)
+                                            for x, y, z in zip(cq, nr, cr)), bool, len(cq)).astype(F32))
+        cols["cmp_partial"].append(_sim(cq, nr, fuzz.partial_ratio))
+        hq, hr = _col(q, "house", a), _col(r, "house", b)
+        cols["house_sub"].append(np.fromiter(((x != y) and bool(x) and bool(y) and (x in y or y in x)
+                                              for x, y in zip(hq, hr)), bool, len(hq)).astype(F32))
+        nq, nr_ = _house_num(hq), _house_num(hr)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            rel = np.abs(nq - nr_) / np.maximum(np.maximum(nq, nr_), 1)
+        cols["house_reldiff"].append(np.where(np.isnan(rel), -1, rel).astype(F32))
+        rn = _col(r, "nums", b)
+        cols["house_in_rnums"].append(np.fromiter((bool(x) and x in set(y.split()) for x, y in zip(hq, rn)),
+                                                  bool, len(hq)).astype(F32))
+    for k, v in cols.items():
+        f[k] = np.concatenate(v) if v else np.zeros(0, F32)
+    # anchor agreement: the S1's best other candidate by blocking score
+    c1 = f["c1_score"].to_numpy()
+    order = np.lexsort((-c1, qi))
+    qs = qi[order]
+    starts = np.r_[0, np.flatnonzero(np.diff(qs)) + 1]
+    sizes = np.diff(np.r_[starts, len(qs)])
+    best = np.repeat(ri[order][starts], sizes)
+    second = np.repeat(np.where(sizes >= 2, ri[order][np.minimum(starts + 1, len(qs) - 1)], -1), sizes)
+    is_top = np.zeros(len(qs), bool)
+    is_top[starts] = True
+    anc_sorted = np.where(is_top, second, best)
+    anchor = np.empty(len(qi), np.int64)
+    anchor[order] = anc_sorted
+    has = anchor >= 0
+    an = np.where(has, anchor, 0)
+    name_sim = np.zeros(len(qi), F32)
+    addr_sim = np.zeros(len(qi), F32)
+    for s in range(0, len(qi), CHUNK):
+        b, a2 = ri[s:s + CHUNK], an[s:s + CHUNK]
+        name_sim[s:s + CHUNK] = _sim(_col(r, "core", b), _col(r, "core", a2), fuzz.token_set_ratio)
+        addr_sim[s:s + CHUNK] = _sim(_col(r, "addr_core", b), _col(r, "addr_core", a2), fuzz.token_set_ratio)
+    f["anc_name_sim"] = np.where(has, name_sim, -1).astype(F32)
+    f["anc_addr_sim"] = np.where(has, addr_sim, -1).astype(F32)
 
 
 def _sorted_tokens(x: str) -> str:
