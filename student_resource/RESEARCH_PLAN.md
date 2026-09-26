@@ -76,6 +76,23 @@ attached today.
 
 ---
 
+## 5. Measured outcomes (26 Sep, 10:30-13:15)
+
+| Experiment | Result | Decision |
+|---|---|---|
+| Stage B context stacking | OOF **0.97898** [0.97876, 0.97923] vs stage A 0.97745 (`0926-103648-decide`, `0926-095450-decide`) | kept |
+| K-class count model (Appendix A update), K = 8 vs K = 4 on stage-B probabilities | gain -0.00001 [-0.00007, +0.00005]; with stage B the best rule is GFM with independence (+0.00009 [+0.00005, +0.00013] vs two thresholds) | bug fix kept; rule chosen per run by the paired bootstrap |
+| Second-hop retrieval (C6), measured before building into a run | recovers 4.8-5.8% of India misses and 5.5% of US misses at ~3.5-5.5 extra candidates per S1 (`runs/second_hop.json`) | built, left off |
+| Loss decomposition of 1 - 0.97898 | blocking 0.0095 (45%), model misses 0.0068 (33%), false links 0.0047 (22%); **59% of the blocking loss sits in the 5.9% of entities with a missed empty-address record** (`runs/error_analysis.md`) | new channel C7 |
+
+**C7 (reverse name channel).** A record with an empty address has only a name. In C1 its combined score is
+capped at 0.5 of a fully matching record. In large name crowds C2 ranks members by address similarity, which
+is zero for it. So these records fall out of their S1's lists. In C7 each empty-address record (~3% of the pool)
+retrieves its top-10 S1s by name alone, and the model and hard assignment then decide among them.
+It runs in iteration 3 together with the generator-aware features, anchor agreement and faster test inference.
+
+---
+
 ## Sources
 
 - [Beyond Scale and Generation: Understanding Language Model-based Entity Matching](https://arxiv.org/abs/2607.24688)

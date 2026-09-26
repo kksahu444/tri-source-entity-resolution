@@ -1,0 +1,96 @@
+{
+ "India": {
+  "true_pairs": 686776,
+  "missed": 24927,
+  "missed_share": 0.0363,
+  "stageA_p>=0.8": {
+   "anchors_per_s1": 3.258,
+   "anchor_precision": 0.9941,
+   "recover_name": 0.0248,
+   "cost_name": 4.05,
+   "recover_name+city": 0.0584,
+   "cost_name+city": 4.28,
+   "recover_name+house": 0.0476,
+   "cost_name+house": 3.76,
+   "recover_addr": 0.0583,
+   "cost_addr": 3.59,
+   "recover_house+name1": 0.0461,
+   "cost_house+name1": 4.3
+  },
+  "c1>=0.7": {
+   "anchors_per_s1": 3.443,
+   "anchor_precision": 0.8086,
+   "recover_name": 0.0237,
+   "cost_name": 4.28,
+   "recover_name+city": 0.0562,
+   "cost_name+city": 4.56,
+   "recover_name+house": 0.0428,
+   "cost_name+house": 4.1,
+   "recover_addr": 0.0308,
+   "cost_addr": 3.8,
+   "recover_house+name1": 0.0379,
+   "cost_house+name1": 5.03
+  },
+  "c1>=0.8": {
+   "anchors_per_s1": 2.715,
+   "anchor_precision": 0.8591,
+   "recover_name": 0.0203,
+   "cost_name": 3.49,
+   "recover_name+city": 0.0494,
+   "cost_name+city": 3.74,
+   "recover_name+house": 0.0365,
+   "cost_name+house": 3.36,
+   "recover_addr": 0.0156,
+   "cost_addr": 3.06,
+   "recover_house+name1": 0.0302,
+   "cost_house+name1": 4.14
+  }
+ },
+ "US": {
+  "true_pairs": 1057023,
+  "missed": 27629,
+  "missed_share": 0.02614,
+  "stageA_p>=0.8": {
+   "anchors_per_s1": 3.296,
+   "anchor_precision": 0.9959,
+   "recover_name": 0.0555,
+   "cost_name": 5.44,
+   "recover_name+city": 0.0046,
+   "cost_name+city": 3.51,
+   "recover_name+house": 0.0043,
+   "cost_name+house": 3.02,
+   "recover_addr": 0.0422,
+   "cost_addr": 3.68,
+   "recover_house+name1": 0.0473,
+   "cost_house+name1": 4.61
+  },
+  "c1>=0.7": {
+   "anchors_per_s1": 3.384,
+   "anchor_precision": 0.8138,
+   "recover_name": 0.0502,
+   "cost_name": 5.47,
+   "recover_name+city": 0.0016,
+   "cost_name+city": 3.51,
+   "recover_name+house": 0.0025,
+   "cost_name+house": 3.25,
+   "recover_addr": 0.0192,
+   "cost_addr": 3.9,
+   "recover_house+name1": 0.0318,
+   "cost_house+name1": 5.93
+  },
+  "c1>=0.8": {
+   "anchors_per_s1": 2.479,
+   "anchor_precision": 0.8853,
+   "recover_name": 0.0405,
+   "cost_name": 4.35,
+   "recover_name+city": 0.0005,
+   "cost_name+city": 2.72,
+   "recover_name+house": 0.0014,
+   "cost_name+house": 2.47,
+   "recover_addr": 0.0076,
+   "cost_addr": 2.99,
+   "recover_house+name1": 0.0228,
+   "cost_house+name1": 4.64
+  }
+ }
+}
