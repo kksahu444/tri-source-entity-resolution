@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from collections import Counter
 
 import numpy as np
 import pandas as pd
@@ -106,69 +107,128 @@ def address_only_channel(qa, ra, k: int, min_cos: float, generate: int, cap: int
     return aq.astype(np.int32), ar.astype(np.int32)
 
 
-NAME_COLS = ("name_b", "core", "legal", "alt", "f_tag", "f_lead", "f_bang", "f_digits", "f_nonlatin", "name_a")
+TOKEN = re.compile(r"[^\W_]+", re.UNICODE)
 
 
-def _shift_house(text: str, old: str, new: str) -> str:
-    """Replace the first standalone occurrence of house number ``old`` (leading zeros allowed)."""
-    return re.sub(rf"(?<![0-9])0*{old}(?![0-9])", new, text, count=1)
+def _shift_house(text: str, old: str, new: str) -> str | None:
+    """Replace the first standalone occurrence of house number ``old`` (leading zeros allowed); None if absent."""
+    out, n = re.subn(rf"(?<![0-9])0*{old}(?![0-9])", new, text, count=1)
+    return out if n else None
+
+
+def suffix_distribution(s1_names: list[str], min_share: float = 0.002) -> tuple[list[str], np.ndarray, set]:
+    """Name endings of the country's S1 names (the generator's legal/suffix vocabulary: Inc, LLC, Group,
+    Partners, Center, ...): alphabetic last tokens that end >= min_share of the names, each in its most
+    common surface form, with their frequencies. Returns (surface forms, probabilities, folded tokens)."""
+    from ..normalize import fold
+    last = Counter()
+    surface: dict[str, Counter] = {}
+    for n in s1_names:
+        toks = TOKEN.findall(n)
+        if not toks:
+            continue
+        f = fold(toks[-1])
+        if f.isalpha() and len(f) >= 2:
+            last[f] += 1
+            surface.setdefault(f, Counter())[toks[-1]] += 1
+    n = max(len(s1_names), 1)
+    keep = [(t, k) for t, k in last.most_common() if k / n >= min_share]
+    if not keep:
+        return [], np.zeros(0), set()
+    forms = [surface[t].most_common(1)[0][0] for t, _ in keep]
+    w = np.array([k for _, k in keep], float)
+    return forms, w / w.sum(), {t for t, _ in keep}
+
+
+def _strip_ending(name: str, endings: set) -> str:
+    """The S1 name without its trailing legal-form tokens (at least one token kept)."""
+    from ..normalize import fold
+    toks = name.split()
+    while len(toks) > 1:
+        words = TOKEN.findall(toks[-1])
+        if words and all(fold(w) in endings for w in words):
+            toks = toks[:-1]
+        else:
+            break
+    return " ".join(toks).rstrip(",")
 
 
 def synthetic_decoys(q_tbl: pa.Table, r_tbl: pa.Table, gt: pd.DataFrame, per_query: float, group_size: int,
-                     seed: int, offset_max: int = 21, neg_share: float = 0.03) -> pa.Table:
-    """Test-like dev pool: multi-record near-duplicate decoy entities.
+                     seed: int, vocab: dict, country: str, translit_map: dict | None = None,
+                     offset_max: int = 21, neg_share: float = 0.03, translit: bool = True) -> pa.Table:
+    """Test-like dev pool: multi-record near-duplicate decoy entities (runs/decoy_shift.md).
 
-    Measured on test (runs/decoy_shift.md): test pools hold groups of ~2 records with a test S1's name and
-    street, a slightly higher house number (offset > 0 in 97%, |offset| quantiles 1/3/5/11/16) and no S1 of
-    their own, next to the S1's own records. Train decoys are single records, so "other candidates support
-    this house" is a safe signal on dev and a trap on test (iterations 2-3 over-linked by 0.37 links per US
-    S1). For a random share of dev queries with >= 2 true records that carry a house number, this copies
-    ``group_size`` of them (one more with probability 0.1) into one unowned decoy entity: house number
-    shifted by the same offset (log-uniform 1..offset_max, negative with probability neg_share) in every
-    field, names rotated among the copies (each decoy carries another true record's name noise).
-    ``per_query`` = extra decoy records per dev query.
-    Returns rows with the pool schema and new S2-/S3-SYN ids; ground truth is unchanged (they match nothing).
+    Test pools hold decoy entities next to many S1s: ~2 records named like the S1 with a different ending
+    ("Group X", "X Corp", "X Partners"), at the S1's street with a slightly higher house number (offset > 0 in
+    97%, |offset| quantiles 1/3/5/11/16), and no S1 of their own. Train has almost none, so "other candidates
+    support this house" is a safe signal on dev and a trap on test (iterations 2-3: +0.37 links per US S1).
+    For a random share of dev queries with >= 2 true records carrying a house number, this builds one decoy
+    entity of ``group_size`` records (one more with probability 0.1): name = the S1's name without its legal
+    form plus an ending drawn from the country's S1 endings (front with probability 0.15, upper case 0.25,
+    one vowel replaced by U+FFFD 0.05, drawn per record); address = one of the S1's true records' addresses
+    (their own noise) with the house number shifted by one offset for the whole entity (log-uniform
+    1..offset_max, negative with probability neg_share). Rows go through the same normaliser as real records.
+    ``per_query`` = extra decoy records per dev query. Ground truth is unchanged: decoys match nothing.
     """
+    from .. import normalize as nz
     rng = np.random.default_rng(seed)
     if per_query <= 0:
         return r_tbl.schema.empty_table()
     rpos = pd.Series(np.arange(r_tbl.num_rows), index=r_tbl["entity_id"].to_numpy(zero_copy_only=False))
     house = r_tbl["house"].to_numpy(zero_copy_only=False)
-    g = gt[gt["s1_id"].isin(set(q_tbl["entity_id"].to_pylist())) & gt["cand_id"].isin(rpos.index)]
+    q = q_tbl.select(["entity_id", "name_a", "house"]).to_pandas().set_index("entity_id")
+    g = gt[gt["s1_id"].isin(q.index) & gt["cand_id"].isin(rpos.index)]
     g = g[house[rpos.reindex(g["cand_id"]).to_numpy()] != ""]
     groups = g.groupby("s1_id")["cand_id"].apply(list)
     groups = groups[groups.map(len) >= 2]
-    if not len(groups):
+    forms, probs, fsuf = suffix_distribution(q["name_a"].tolist())
+    if not len(groups) or not forms:
         return r_tbl.schema.empty_table()
-    size = groups.map(lambda x: min(len(x), group_size + 0.1)).to_numpy()
-    share = min(1.0, per_query * q_tbl.num_rows / max(float(size.sum()), 1.0))
+    share = min(1.0, per_query / (group_size + 0.1) * q_tbl.num_rows / len(groups))
     groups = groups[rng.random(len(groups)) < share]
     need = np.unique(rpos.reindex([c for cs in groups for c in cs]).to_numpy())
-    r = r_tbl.take(pa.array(need)).to_pandas()
-    rpos = pd.Series(np.arange(len(r)), index=r["entity_id"])
-    rows, n = [], 0
-    for cands in groups:
-        cands = list(rng.permutation(cands))[:group_size + int(rng.random() < 0.1)]
-        idx = rpos.reindex(cands).to_numpy()
+    r = r_tbl.select(["entity_id", "addr_a", "house", "src"]).take(pa.array(need)).to_pandas().set_index("entity_id")
+    endings = set(vocab.get("legal", {}).get(country, []))       # legal forms only: business words stay
+    names, addrs, srcs = [], [], []
+    for s1, cands in groups.items():
+        base = _strip_ending(q.at[s1, "name_a"], endings)
         off = max(1, int(round(np.exp(rng.uniform(0, np.log(offset_max)))))) * (-1 if rng.random() < neg_share else 1)
-        for j, i in enumerate(idx):
-            row = r.iloc[i].to_dict()
-            name_src = r.iloc[idx[(j + 1) % len(idx)]]
-            for c in NAME_COLS:
-                if c in row:
-                    row[c] = name_src[c]
-            old = row["house"]
-            new = str(max(1, int(old) + off)) if old.isdigit() else old
-            if new == old:
-                new = str(int(old) + abs(off)) if old.isdigit() else old
-            for c in ("addr_b", "addr_core", "addr_a"):
-                row[c] = _shift_house(row[c], old, new)
-            row["nums"] = " ".join(new if t == old else t for t in row["nums"].split())
-            row["house"] = new
-            row["entity_id"] = f"S{int(row['src'])}-SYN{n}"
-            rows.append(row)
-            n += 1
-    out = pd.DataFrame(rows, columns=r.columns)
+        for cid in list(rng.permutation(cands))[:group_size + int(rng.random() < 0.1)]:
+            old = r.at[cid, "house"]
+            new = str(max(1, int(old) + off)) if old.isdigit() else None
+            addr = _shift_house(r.at[cid, "addr_a"], old, new) if new and new != old else None
+            if addr is None:
+                continue
+            suf = forms[rng.choice(len(forms), p=probs)]
+            name = f"{suf} {base}" if rng.random() < 0.15 else f"{base} {suf}"
+            if rng.random() < 0.25:
+                name = name.upper()
+            if rng.random() < 0.05:
+                vow = [i for i, ch in enumerate(name) if ch.lower() in "aeiou"]
+                if vow:
+                    i = vow[rng.integers(len(vow))]
+                    name = name[:i] + "�" + name[i + 1:]
+            names.append(name)
+            addrs.append(addr)
+            srcs.append(r.at[cid, "src"])
+    if not names:
+        return r_tbl.schema.empty_table()
+    nz._init_worker(vocab, translit)
+    rows = nz._norm_chunk((names, addrs, [country] * len(names)))
+    out = pd.DataFrame(rows, columns=list(nz.NAME_FIELDS) + list(nz.ADDR_FIELDS))
+    if translit_map:
+        lg = frozenset(vocab.get("legal", {}).get(country, []))
+        for i in np.flatnonzero(out["f_nonlatin"].to_numpy() == 1):
+            toks = [translit_map.get(t, t) for t in out.at[i, "name_b"].split()]
+            core, leg = nz.split_legal(toks, lg)
+            out.at[i, "name_b"], out.at[i, "core"] = " ".join(toks), " ".join(core)
+            out.at[i, "legal"] = " ".join(sorted(set(leg)))
+    out.insert(0, "entity_id", [f"S{int(sv)}-SYN{i}" for i, sv in enumerate(srcs)])
+    out.insert(1, "country", country)
+    out["name_a"] = [nz.view_a(x) for x in names]
+    out["addr_a"] = [nz.view_a(x) for x in addrs]
+    out["src"] = srcs
+    out = out[r_tbl.schema.names]
     return pa.Table.from_pandas(out, schema=r_tbl.schema, preserve_index=False)
 
 
@@ -366,8 +426,14 @@ def run(cfg: dict, split: str = "dev", frac: float | None = None) -> dict:
                                   for k in (2, 3)])
         dc = (cfg.get("dev") or {}).get("decoys") or {}
         if split == "dev" and dc.get("enabled", False):
+            art = cfg["paths"]["artifacts"]
+            vocab = json.load(open(os.path.join(art, "vocab.json"), encoding="utf-8"))
+            tpath = os.path.join(art, "translit_dict.json")
+            tmap = json.load(open(tpath, encoding="utf-8")) \
+                if cfg["normalize"].get("norm_dir") == "norm_tl" and os.path.exists(tpath) else None
             syn = synthetic_decoys(q_tbl, tbl_r, gt, dc.get("per_query", {}).get(country, 0.0), dc.get("group_size", 2),
-                                   cfg["seed"] + sum(map(ord, country)), dc.get("offset_max", 21), dc.get("neg_share", 0.03))
+                                   cfg["seed"] + sum(map(ord, country)), vocab, country, tmap, dc.get("offset_max", 21),
+                                   dc.get("neg_share", 0.03), cfg["flags"].get("TRANSLITERATE", True))
             tbl_r = pa.concat_tables([tbl_r, syn])
             n_syn[country] = syn.num_rows
             log.info("block dev %s: %s synthetic decoy records (%.3f per query)", country, f"{syn.num_rows:,}",

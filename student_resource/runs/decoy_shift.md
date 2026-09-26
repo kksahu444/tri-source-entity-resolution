@@ -57,13 +57,33 @@ with "Green Rmg Ltd", "Group Green Rmg" at 598. Groups sit next to the S1's own 
 French street-type abbreviations (r./av/bd/imp) are not a problem: same name + house + street rest scores
 p = 1.000 at the median whether the record writes "r" or "rue".
 
-## 5. Fix (iteration 5, config_v5)
+## 5. Broad definition (the rate actually used)
 
-- Test-like dev: `dev.decoys` adds unowned 2-record decoy entities (3 with probability 0.1) to the dev pool:
-  copies of a dev query's true records with one house offset (log-uniform 1..21, negative with probability
-  0.03) in every field and names rotated among the copies, at the group rate test shows over dev
-  (US 0.053, India 0.0035 extra records per query). Dev OOF now pays for linking such groups.
+Sections 3-4 required an identical sorted name and street, which misses decoys carrying name/street noise
+("Group Misaon Pelican", "Hgihway"). Broad: house 1-30 apart, same city, core token-set ratio >= 85.
+
+| Country | split | near/S1 | in groups/S1 | offset > 0 | p > 0.5 per S1 | dev: true/S1 | dev: decoys in groups/S1 |
+|---|---|---|---|---|---|---|---|
+| US | dev | 0.664 | 0.060 | 0.964 | 0.040 | 0.039 | 0.037 |
+| US | test | 1.235 | 0.837 | 0.981 | 0.497 | - | - |
+| India | dev | 0.341 | 0.100 | 0.691 | 0.078 | 0.078 | 0.056 |
+| India | test | 0.473 | 0.209 | 0.791 | 0.113 | - | - |
+| France | test | 1.215 | 0.624 | 0.903 | 0.251 | - | - |
+
+Excess group records per S1 on test: US 0.78, India 0.11 (France ~0.6, no dev). Upload 1 (no support features)
+did not link them and its US/India public score matched dev, so they are decoys, not true matches.
+
+The acceptance check (`python -m src.acceptance`) on the two uploads, near_beside = near links of S1s that
+also have an exact-house link, per S1 (train truth level in brackets): upload 1 US 0.0064 (0.0052), India
+0.0026 (0.0030), France 0.0033 (0.0041): pass. Upload 2 US 0.0466, India 0.0041, France 0.0162: fail.
+
+## 6. Fix (iteration 5, config_v5)
+
+- Test-like dev: `dev.decoys` adds unowned decoy entities to the dev pool at the excess rate (US 0.78, India
+  0.11 records per query; 2 records, 3 with probability 0.1). Each record: the S1's name without its legal
+  form plus an ending drawn from the country's S1 endings (LLC, Inc, Group, Corp, PC, Center, Partners, ...;
+  front 15%, upper case 25%, one vowel -> U+FFFD 5%), address = one of the S1's true records' addresses with
+  one house offset for the entity (log-uniform 1..21, negative 3%), normalised like every real record.
 - `decide` starts from stage A and adopts stage B, then the cross-encoder, only when the paired bootstrap
   interval of the per-entity gain on this dev excludes zero.
-- Acceptance check before an upload: test links per S1 close to dev's, and test near-duplicate groups scored
-  like the dev decoys (a check on the file, not a fitted parameter).
+- `src.acceptance` must pass before any upload.

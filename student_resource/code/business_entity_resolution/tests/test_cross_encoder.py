@@ -151,24 +151,28 @@ def test_synthetic_decoys():
     import pyarrow as pa
 
     from src.blocking.union import synthetic_decoys
-    r = pd.DataFrame({"entity_id": ["S2-1", "S3-2", "S2-3", "S2-9"], "name_a": ["Acme LLC", "ACME", "Acme Inc", "Zed"],
-                      "core": ["acme", "acme", "acme", "zed"], "addr_a": ["0120 Main St, Reno", "120 MAIN ST", "120 Main Street", "5 Elm"],
-                      "addr_b": ["120 main st, reno", "120 main st", "120 main street", "5 elm"],
-                      "addr_core": ["120 main st reno", "120 main st", "120 main street", "5 elm"],
-                      "house": ["120", "120", "120", "5"], "nums": ["120 7", "120", "120", "5"], "src": [2, 3, 2, 2]})
-    q = pa.table({"entity_id": ["S1-a", "S1-b"]})
+    from src.normalize import ADDR_FIELDS, NAME_FIELDS
+    cols = ["entity_id", "country", *NAME_FIELDS, *ADDR_FIELDS, "name_a", "addr_a", "src"]
+    r = pd.DataFrame({c: [""] * 4 for c in cols})
+    r["entity_id"] = ["S2-1", "S3-2", "S2-3", "S2-9"]
+    r["country"] = "US"
+    r["addr_a"] = ["0120 Main St, Reno, NV", "120 MAIN ST, RENO", "120 Main Street, Reno", "5 Elm"]
+    r["house"] = ["120", "120", "120", "5"]
+    r["src"] = np.int8([2, 3, 2, 2])
+    for c in ("f_tag", "f_lead", "f_bang", "f_digits", "f_nonlatin", "n_parts"):
+        r[c] = np.int8(0)
+    tbl = pa.Table.from_pandas(r, preserve_index=False)
+    q = pa.table({"entity_id": ["S1-a", "S1-b"], "name_a": ["Acme Widgets LLC", "Zed Inc"], "house": ["120", "5"]})
     gt = pd.DataFrame({"s1_id": ["S1-a"] * 3 + ["S1-b"], "cand_id": ["S2-1", "S3-2", "S2-3", "S2-9"]})
-    syn = synthetic_decoys(q, pa.Table.from_pandas(r, preserve_index=False), gt, per_query=10.0, group_size=2, seed=0,
-                           neg_share=0.0).to_pandas()
-    assert (syn.core == "acme").all()                   # S1-b has a single true record: no group
-    a = syn
-    assert len(a) in (2, 3) and a.entity_id.str.match(r"S[23]-SYN\d+").all() and a.house.nunique() == 1
-    h = a.house.iloc[0]
-    assert 1 <= int(h) - 120 <= 21
-    assert all(h in x and "120" not in x for x in a.addr_a)
-    assert all(x.startswith(h + " ") for x in a.addr_core) and all("120" not in x for x in a.addr_b)
-    assert set(a.name_a) <= {"Acme LLC", "ACME", "Acme Inc"}
-    assert synthetic_decoys(q, pa.Table.from_pandas(r, preserve_index=False), gt, 0.0, 2, 0).num_rows == 0
+    vocab = {"legal": {"US": ["llc", "inc"]}, "regions": {"US": ["nv"]}}
+    syn = synthetic_decoys(q, tbl, gt, per_query=10.0, group_size=2, seed=0, vocab=vocab, country="US", neg_share=0.0)
+    assert syn.schema.equals(tbl.schema)
+    a = syn.to_pandas()
+    assert len(a) in (2, 3) and a.entity_id.str.match(r"S[23]-SYN\d+").all()      # S1-b: one true record, no group
+    assert a.house.nunique() == 1 and 1 <= int(a.house.iloc[0]) - 120 <= 21
+    assert all(" 120 " not in f" {x} " for x in a.addr_core) and all(x.startswith(a.house.iloc[0]) for x in a.addr_core)
+    assert all("acme widgets" in x for x in a.core)                                   # S1 name, legal form replaced
+    assert synthetic_decoys(q, tbl, gt, 0.0, 2, 0, vocab, "US").num_rows == 0
 
 
 def test_stackb_test_uses_ce_variant(tmp_path):
