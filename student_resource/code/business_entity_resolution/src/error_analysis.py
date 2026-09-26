@@ -34,11 +34,74 @@ from .stack import pred_dir
 from .utils import load_config
 
 
+NOISE_ORDER = ["empty record address", "name replaced (no shared token)", "house number conflict",
+               "city changed", "name crowd (>= 3 in city)", "other"]
+
+
+def _classify_misses(country, qt, rt, mq, mr, crowd) -> pd.DataFrame:
+    """D0 noise type (first match in NOISE_ORDER) and script of every true pair blocking missed."""
+    if len(mq) == 0:
+        return pd.DataFrame(columns=["country", "script", "noise"])
+    q = qt.take(mq).select(["core", "house", "city"]).to_pydict()
+    r = rt.take(mr).select(["core", "house", "city", "addr_core", "f_nonlatin"]).to_pydict()
+    noise = []
+    for i in range(len(mq)):
+        if not r["addr_core"][i]:
+            noise.append(NOISE_ORDER[0])
+        elif not (set(q["core"][i].split()) & set(r["core"][i].split())):
+            noise.append(NOISE_ORDER[1])
+        elif q["house"][i] and r["house"][i] and q["house"][i] != r["house"][i]:
+            noise.append(NOISE_ORDER[2])
+        elif q["city"][i] and r["city"][i] and q["city"][i] != r["city"][i]:
+            noise.append(NOISE_ORDER[3])
+        elif crowd[mq[i]] >= 3:
+            noise.append(NOISE_ORDER[4])
+        else:
+            noise.append(NOISE_ORDER[5])
+    script = np.where(np.asarray(r["f_nonlatin"]) == 1, "native", "Latin")
+    return pd.DataFrame({"country": country, "script": script, "noise": noise})
+
+
+def write_budget(cfg, df: pd.DataFrame, misses: pd.DataFrame, tag: str, rule: str) -> None:
+    """Work-order T4: per-country triage of 1 - F0.5 into five causes, and blocking misses by
+    country x script x noise type."""
+    n = len(df)
+    sing = df["n_true"] == 0
+    empty = df["n_pred"] == 0
+    cat = {
+        "false merge on a singleton": np.where(sing & ~empty, 1 - df["f"], 0),
+        "blocking miss": np.where(~sing & empty & (df["n_ret"] == 0), 1.0, np.where(~sing & ~empty, 1 - df["f_ceil"], 0)),
+        "abstained on a real match": np.where(~sing & empty & (df["n_ret"] > 0), 1.0, 0),
+        "extra wrong link": np.where(~sing & ~empty, df["f_nofp"] - df["f"], 0),
+        "missed link inside the candidates": np.where(~sing & ~empty, df["f_ceil"] - df["f_nofp"], 0),
+    }
+    total = 1 - df["f"].to_numpy()
+    assert np.allclose(sum(cat.values()), total), "triage must sum to the loss"
+    out = [f"# Error budget (work order T4), tag `{tag}`, rule `{rule}`\n",
+           f"Dev OOF macro F0.5 {df['f'].mean():.5f}; total loss {total.mean():.5f}. Each cell = contribution to 1 - macro F0.5.\n",
+           "| Cause | " + " | ".join(sorted(df["country"].unique())) + " | all | share |",
+           "|---|" + "---|" * (df["country"].nunique() + 2)]
+    for k, v in cat.items():
+        per_c = [f"{v[(df['country'] == c).to_numpy()].sum() / n:.5f}" for c in sorted(df["country"].unique())]
+        out.append(f"| {k} | " + " | ".join(per_c) + f" | {v.sum() / n:.5f} | {v.sum() / total.sum():.1%} |")
+    out += ["\n## Blocking misses by country x script x noise type (count, share of that country's misses)\n",
+            "| Country | Script | Noise type | Misses | Share |", "|---|---|---|---|---|"]
+    if len(misses):
+        g = misses.groupby(["country", "script", "noise"]).size().rename("n").reset_index()
+        g["share"] = g["n"] / g.groupby("country")["n"].transform("sum")
+        for _, row in g.sort_values(["country", "n"], ascending=[True, False]).iterrows():
+            out.append(f"| {row['country']} | {row['script']} | {row['noise']} | {row['n']:,} | {row['share']:.1%} |")
+    path = os.path.join(cfg["paths"]["runs"], f"error_budget_{tag}.md")
+    open(path, "w", encoding="utf-8").write("\n".join(out) + "\n")
+    print("\n".join(out))
+
+
 def main(argv=None):
     sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default="config.yaml")
     ap.add_argument("--examples", type=int, default=12)
+    ap.add_argument("--tag", default="")
     args = ap.parse_args(argv)
     cfg = load_config(args.config)
     dec = pickle.load(open(os.path.join(cfg["paths"]["artifacts"], "decision.pkl"), "rb"))
@@ -47,11 +110,12 @@ def main(argv=None):
                      keep_default_na=False)
     rng = np.random.default_rng(0)
     lines = [f"# Error analysis: where macro F0.5 is lost (dev OOF, rule `{dec['rule']}`)\n"]
-    rows = []
+    rows, miss_rows = [], []
     for c in countries(cfg, "dev"):
-        qt = pq.read_table(os.path.join(block_dir(cfg), f"dev_{c}_q.parquet"), columns=["entity_id", "name_a", "addr_a"])
+        qt = pq.read_table(os.path.join(block_dir(cfg), f"dev_{c}_q.parquet"),
+                           columns=["entity_id", "name_a", "addr_a", "core", "house", "city"])
         rt = pq.read_table(os.path.join(block_dir(cfg), f"dev_{c}_r.parquet"),
-                           columns=["entity_id", "name_a", "addr_a", "f_nonlatin", "addr_core"])
+                           columns=["entity_id", "name_a", "addr_a", "f_nonlatin", "addr_core", "core", "house", "city"])
         q_ids = qt["entity_id"].to_numpy(zero_copy_only=False)
         r_ids = rt["entity_id"].to_numpy(zero_copy_only=False)
         r_nonlatin = rt["f_nonlatin"].to_numpy()
@@ -96,7 +160,9 @@ def main(argv=None):
         crowd[has] = aux["q_name_city_crowd"].to_numpy()[first[has]]
         blk_nonlatin = np.bincount(tq[~retrieved], weights=r_nonlatin[tr[~retrieved]], minlength=n_q)
         blk_empty = np.bincount(tq[~retrieved], weights=r_empty[tr[~retrieved]].astype(float), minlength=n_q)
-        rows.append(pd.DataFrame({"country": c, "n_true": n_true, "f": f_act, "loss_fp": f_nofp - f_act,
+        miss_rows.append(_classify_misses(c, qt, rt, tq[~retrieved], tr[~retrieved], crowd))
+        rows.append(pd.DataFrame({"country": c, "n_true": n_true, "n_pred": n_pred, "n_ret": n_ret,
+                                  "f_ceil": f_ceil, "f_nofp": f_nofp, "f": f_act, "loss_fp": f_nofp - f_act,
                                   "loss_model_fn": f_ceil - f_nofp, "loss_block": 1 - f_ceil,
                                   "crowd": crowd, "blocked_nonlatin": blk_nonlatin > 0, "blocked_empty_addr": blk_empty > 0}))
         # examples
@@ -139,6 +205,7 @@ def main(argv=None):
         head.append(f"| {name} | {m.mean():.1%} | {df['loss_fp'][m].sum() / n:.5f} | "
                     f"{df['loss_model_fn'][m].sum() / n:.5f} | {df['loss_block'][m].sum() / n:.5f} |")
     lines = lines[:1] + head + lines[1:]
+    write_budget(cfg, df, pd.concat(miss_rows, ignore_index=True), args.tag or cfg["_hash"], dec["rule"])
     out = os.path.join(cfg["paths"]["runs"], "error_analysis.md")
     open(out, "w", encoding="utf-8").write("\n".join(lines) + "\n")
     json.dump(dec_tab, open(os.path.join(cfg["paths"]["runs"], "loss_decomposition.json"), "w"), indent=1)

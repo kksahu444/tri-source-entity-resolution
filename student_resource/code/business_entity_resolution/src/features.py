@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 from rapidfuzz import fuzz
-from rapidfuzz.distance import JaroWinkler
+from rapidfuzz.distance import JaroWinkler, Levenshtein
 from rapidfuzz.process import cpdist
 from sklearn.feature_extraction.text import CountVectorizer
 
@@ -257,7 +257,7 @@ def gen_features(f: pd.DataFrame, q, r, qi, ri) -> None:
     """Generic features aimed at observed noise mechanisms (no dataset-specific word lists):
     website-style names (space-free containment), house numbers with dropped/changed digits or ranges,
     and agreement with the S1's best other candidate (anchor), a non-chaining consistency check."""
-    cols = {k: [] for k in ("cmp_sub", "cmp_partial", "house_sub", "house_reldiff", "house_in_rnums")}
+    cols = {k: [] for k in ("cmp_sub", "cmp_partial", "house_sub", "house_reldiff", "house_in_rnums", "house_lev")}
     for s in range(0, len(qi), CHUNK):
         a, b = qi[s:s + CHUNK], ri[s:s + CHUNK]
         cq = np.array([x.replace(" ", "") for x in _col(q, "core", a)], dtype=object)
@@ -267,6 +267,8 @@ def gen_features(f: pd.DataFrame, q, r, qi, ri) -> None:
                                             for x, y, z in zip(cq, nr, cr)), bool, len(cq)).astype(F32))
         cols["cmp_partial"].append(_sim(cq, nr, fuzz.partial_ratio))
         hq, hr = _col(q, "house", a), _col(r, "house", b)
+        cols["house_lev"].append(np.where((hq != "") & (hr != ""),
+                                          cpdist(hq, hr, scorer=Levenshtein.distance, workers=-1), -1).astype(F32))
         cols["house_sub"].append(np.fromiter(((x != y) and bool(x) and bool(y) and (x in y or y in x)
                                               for x, y in zip(hq, hr)), bool, len(hq)).astype(F32))
         nq, nr_ = _house_num(hq), _house_num(hr)

@@ -94,6 +94,14 @@ def main():
         if rc != 0:
             break
 
+    # work-order analyses on this run's artifacts (T4 error budget, T2 transfer checks); failures don't
+    # affect the submission files already written
+    tag = os.environ.get("ER_TAG", "kaggle-" + time.strftime("%m%d-%H%M"))
+    if rc == 0:
+        for mod in ("src.error_analysis", "src.transfer"):
+            cmd = f"cd {code} && {sys.executable} -u -m {mod} --config config_kaggle.yaml --tag {tag} 2>&1 | tee -a {W}/runs/analysis.log"
+            subprocess.run(["bash", "-c", cmd], env=env)
+
     # checkpoint small artifacts (models, vocabularies, decisions) for resumes and download
     ck = f"{W}/ckpt/artifacts"
     os.makedirs(ck, exist_ok=True)
