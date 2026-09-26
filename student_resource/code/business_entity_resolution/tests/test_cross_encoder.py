@@ -158,11 +158,13 @@ def test_synthetic_decoys():
                       "house": ["120", "120", "120", "5"], "nums": ["120 7", "120", "120", "5"], "src": [2, 3, 2, 2]})
     q = pa.table({"entity_id": ["S1-a", "S1-b"]})
     gt = pd.DataFrame({"s1_id": ["S1-a"] * 3 + ["S1-b"], "cand_id": ["S2-1", "S3-2", "S2-3", "S2-9"]})
-    syn = synthetic_decoys(q, pa.Table.from_pandas(r, preserve_index=False), gt, per_query=10.0, max_records=2, seed=0).to_pandas()
-    a = syn[syn.core == "acme"]
-    assert len(a) == 2 and a.entity_id.str.match(r"S[23]-SYN\d+").all() and a.house.nunique() == 1
+    syn = synthetic_decoys(q, pa.Table.from_pandas(r, preserve_index=False), gt, per_query=10.0, group_size=2, seed=0,
+                           neg_share=0.0).to_pandas()
+    assert (syn.core == "acme").all()                   # S1-b has a single true record: no group
+    a = syn
+    assert len(a) in (2, 3) and a.entity_id.str.match(r"S[23]-SYN\d+").all() and a.house.nunique() == 1
     h = a.house.iloc[0]
-    assert h != "120" and 1 <= abs(int(h) - 120) <= 30
+    assert 1 <= int(h) - 120 <= 21
     assert all(h in x and "120" not in x for x in a.addr_a)
     assert all(x.startswith(h + " ") for x in a.addr_core) and all("120" not in x for x in a.addr_b)
     assert set(a.name_a) <= {"Acme LLC", "ACME", "Acme Inc"}

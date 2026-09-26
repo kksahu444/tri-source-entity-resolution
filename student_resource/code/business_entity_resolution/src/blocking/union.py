@@ -114,17 +114,19 @@ def _shift_house(text: str, old: str, new: str) -> str:
     return re.sub(rf"(?<![0-9])0*{old}(?![0-9])", new, text, count=1)
 
 
-def synthetic_decoys(q_tbl: pa.Table, r_tbl: pa.Table, gt: pd.DataFrame, per_query: float, max_records: int,
-                     seed: int) -> pa.Table:
+def synthetic_decoys(q_tbl: pa.Table, r_tbl: pa.Table, gt: pd.DataFrame, per_query: float, group_size: int,
+                     seed: int, offset_max: int = 21, neg_share: float = 0.03) -> pa.Table:
     """Test-like dev pool: multi-record near-duplicate decoy entities.
 
-    Measured on test (runs/decoy_shift.md): test pools hold groups of 2+ records with a dev S1's name and
-    street but a nearby house number (+-2..21) and no S1 of their own (an entity whose S1 was withheld).
-    Train decoys are single records, so "other candidates support this house" is a safe signal on dev and
-    a trap on test (iteration 2-3 over-linked by 0.37 links per US S1). For a random share of dev queries,
-    this copies up to ``max_records`` of the query's true records into one unowned decoy entity: house
-    number shifted by the same offset in every field, names rotated among the copies (each decoy record
-    carries another true record's name noise). ``per_query`` = extra decoy records per dev query.
+    Measured on test (runs/decoy_shift.md): test pools hold groups of ~2 records with a test S1's name and
+    street, a slightly higher house number (offset > 0 in 97%, |offset| quantiles 1/3/5/11/16) and no S1 of
+    their own, next to the S1's own records. Train decoys are single records, so "other candidates support
+    this house" is a safe signal on dev and a trap on test (iterations 2-3 over-linked by 0.37 links per US
+    S1). For a random share of dev queries with >= 2 true records that carry a house number, this copies
+    ``group_size`` of them (one more with probability 0.1) into one unowned decoy entity: house number
+    shifted by the same offset (log-uniform 1..offset_max, negative with probability neg_share) in every
+    field, names rotated among the copies (each decoy carries another true record's name noise).
+    ``per_query`` = extra decoy records per dev query.
     Returns rows with the pool schema and new S2-/S3-SYN ids; ground truth is unchanged (they match nothing).
     """
     rng = np.random.default_rng(seed)
@@ -135,9 +137,10 @@ def synthetic_decoys(q_tbl: pa.Table, r_tbl: pa.Table, gt: pd.DataFrame, per_que
     g = gt[gt["s1_id"].isin(set(q_tbl["entity_id"].to_pylist())) & gt["cand_id"].isin(rpos.index)]
     g = g[house[rpos.reindex(g["cand_id"]).to_numpy()] != ""]
     groups = g.groupby("s1_id")["cand_id"].apply(list)
+    groups = groups[groups.map(len) >= 2]
     if not len(groups):
         return r_tbl.schema.empty_table()
-    size = groups.map(lambda x: min(len(x), max_records)).to_numpy()
+    size = groups.map(lambda x: min(len(x), group_size + 0.1)).to_numpy()
     share = min(1.0, per_query * q_tbl.num_rows / max(float(size.sum()), 1.0))
     groups = groups[rng.random(len(groups)) < share]
     need = np.unique(rpos.reindex([c for cs in groups for c in cs]).to_numpy())
@@ -145,9 +148,9 @@ def synthetic_decoys(q_tbl: pa.Table, r_tbl: pa.Table, gt: pd.DataFrame, per_que
     rpos = pd.Series(np.arange(len(r)), index=r["entity_id"])
     rows, n = [], 0
     for cands in groups:
-        cands = list(rng.permutation(cands))[:max_records]
+        cands = list(rng.permutation(cands))[:group_size + int(rng.random() < 0.1)]
         idx = rpos.reindex(cands).to_numpy()
-        off = int(round(np.exp(rng.uniform(np.log(1.5), np.log(30))))) * (1 if rng.random() < 0.5 else -1)
+        off = max(1, int(round(np.exp(rng.uniform(0, np.log(offset_max)))))) * (-1 if rng.random() < neg_share else 1)
         for j, i in enumerate(idx):
             row = r.iloc[i].to_dict()
             name_src = r.iloc[idx[(j + 1) % len(idx)]]
@@ -363,8 +366,8 @@ def run(cfg: dict, split: str = "dev", frac: float | None = None) -> dict:
                                   for k in (2, 3)])
         dc = (cfg.get("dev") or {}).get("decoys") or {}
         if split == "dev" and dc.get("enabled", False):
-            syn = synthetic_decoys(q_tbl, tbl_r, gt, dc.get("per_query", {}).get(country, 0.0), dc.get("max_records", 3),
-                                   cfg["seed"] + sum(map(ord, country)))
+            syn = synthetic_decoys(q_tbl, tbl_r, gt, dc.get("per_query", {}).get(country, 0.0), dc.get("group_size", 2),
+                                   cfg["seed"] + sum(map(ord, country)), dc.get("offset_max", 21), dc.get("neg_share", 0.03))
             tbl_r = pa.concat_tables([tbl_r, syn])
             n_syn[country] = syn.num_rows
             log.info("block dev %s: %s synthetic decoy records (%.3f per query)", country, f"{syn.num_rows:,}",
