@@ -28,6 +28,7 @@ def main(argv=None) -> int:
     ap.add_argument("--stage", required=True, choices=list(STAGES) + ["all"])
     ap.add_argument("--split", default=None, help="dev | test (stages that support it)")
     ap.add_argument("--frac", type=float, default=None, help="benchmark share of queries (block stage)")
+    ap.add_argument("--tag", default="", help="label recorded in the run log's data_slice (ablations)")
     args = ap.parse_args(argv)
     cfg = load_config(args.config)
     seed_everything(cfg["seed"])
@@ -41,7 +42,8 @@ def main(argv=None) -> int:
             kwargs["frac"] = args.frac
         res = mod.run(cfg, **kwargs) or {}
         res.setdefault("stage", stage)
-        append_run_log(cfg, {"run_id": run_id, "data_slice": args.split or "all", **res})
+        slice_ = (args.split or "all") + (f":{args.tag}" if args.tag else "")
+        append_run_log(cfg, {"run_id": run_id, "data_slice": slice_, **res})
         log.info("stage %s done: %s", stage, {k: v for k, v in res.items() if k != "notes"})
     return 0
 

@@ -85,16 +85,24 @@ def run(cfg: dict, split: str = "dev") -> dict:
     model_path = os.path.join(fd, "stageB.pkl")
     cs = countries(cfg, split)
     if split == "dev":
-        frames = []
-        for c in cs:
+        Xs, ys, folds, qis, ris, cc = [], [], [], [], [], []
+        for i, c in enumerate(cs):
             df, ctx = _load(cfg, split, c)
-            frames.append(pd.concat([df, ctx], axis=1).assign(_c=c))
-        df = pd.concat(frames, ignore_index=True)
-        del frames
-        cols = [c for c in df.columns if c not in META and c != "_c"]
-        X, y, fold = df[cols].to_numpy(np.float32), df["y"].to_numpy(), df["fold"].to_numpy()
+            fcols = [k for k in df.columns if k not in META]
+            cols = fcols + list(ctx.columns)
+            Xs.append(np.hstack([df[fcols].to_numpy(np.float32), ctx.to_numpy(np.float32)]))
+            ys.append(df["y"].to_numpy())
+            folds.append(df["fold"].to_numpy())
+            qis.append(df["qi"].to_numpy())
+            ris.append(df["ri"].to_numpy())
+            cc.append(np.full(len(df), i))
+            del df, ctx
+        X, y, fold = np.vstack(Xs), np.concatenate(ys), np.concatenate(folds)
+        del Xs
+        qi_all, ri_all, c_all = np.concatenate(qis), np.concatenate(ris), np.concatenate(cc)
+        df = pd.DataFrame({"qi": qi_all, "ri": ri_all, "y": y, "_c": np.array(cs)[c_all]})
         rng = np.random.default_rng(cfg["seed"] + 1)
-        s1_key = df["_c"].map({c: i for i, c in enumerate(cs)}).to_numpy(np.int64) * 10_000_000 + df["qi"].to_numpy()
+        s1_key = c_all.astype(np.int64) * 10_000_000 + qi_all
         uniq = np.unique(s1_key)
         es_mask = np.isin(s1_key, uniq[rng.random(len(uniq)) < 0.05])
         oof = np.zeros(len(df), np.float32)
