@@ -18,7 +18,7 @@ import pandas as pd
 from .blocking.union import block_dir
 from .featurize import countries, feat_dir
 from .features import _group_stats
-from .stack import MAX_ROUNDS, EARLY, META, PARAMS, pred_dir
+from .stack import MAX_ROUNDS, EARLY, META, PARAMS, pred_dir, predict_test, train_full
 from .utils import Timer, get_logger
 
 log = get_logger()
@@ -114,7 +114,8 @@ def run(cfg: dict, split: str = "dev") -> dict:
             oof[fold == f] = m.predict(X[fold == f], num_iteration=m.best_iteration)
             models.append(m)
             log.info("stage B fold %d: best_iter %d (%.0fs)", f, m.best_iteration, t())
-        pickle.dump({"models": models, "cols": cols}, open(model_path, "wb"))
+        full = train_full(cfg, X, y, [m.best_iteration for m in models], t)
+        pickle.dump({"models": models, "cols": cols, "full_model": full}, open(model_path, "wb"))
         for c in cs:
             m = df["_c"].to_numpy() == c
             pd.DataFrame({"qi": df["qi"][m], "ri": df["ri"][m], "y": df["y"][m], "p": oof[m]}).to_parquet(
@@ -128,7 +129,7 @@ def run(cfg: dict, split: str = "dev") -> dict:
         for c in cs:
             df, ctx = _load(cfg, split, c)
             X = pd.concat([df, ctx], axis=1)[st["cols"]].to_numpy(np.float32)
-            p = np.mean([m.predict(X, num_iteration=m.best_iteration) for m in st["models"]], axis=0)
+            p = predict_test(st, X)
             pd.DataFrame({"qi": df["qi"], "ri": df["ri"], "p": p.astype(F32)}).to_parquet(
                 os.path.join(pdir, f"test_{c}.parquet"), index=False)
             info[c] = len(df)

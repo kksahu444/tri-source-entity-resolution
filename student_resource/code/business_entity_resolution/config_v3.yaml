@@ -31,3 +31,4 @@ decision: {rule: two_threshold, max_m: 30}   # later gfm_count or gfm_indep, whi
 france: {offset: loco_prior}                 # distribution_matching | em only if ALLOW_TEST_PRED_FIT
 
 stack_b: true                        # iteration 2: stage-B context stacking on stage-A probabilities
+stack: {test_models: full}             # iteration 3: one all-dev model for test inference (5x fewer test passes)

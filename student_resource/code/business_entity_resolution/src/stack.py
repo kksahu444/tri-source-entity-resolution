@@ -20,6 +20,25 @@ PARAMS = {"objective": "binary", "learning_rate": 0.1, "num_leaves": 127, "min_d
 MAX_ROUNDS, EARLY = 1500, 30
 
 
+def train_full(cfg, X, y, iters, t=None):
+    """Optional single model on all dev pairs for test inference (config stack.test_models: full):
+    1 prediction pass instead of 5 over ~26M test pairs. Rounds = 1.1 x mean fold best iteration
+    (more data than a fold). OOF scores still come from the 5 fold models."""
+    if cfg.get("stack", {}).get("test_models", "folds") != "full":
+        return None
+    rounds = int(1.1 * np.mean(iters))
+    m = lgb.train({**PARAMS, "seed": cfg["seed"]}, lgb.Dataset(X, y), rounds)
+    if t is not None:
+        log.info("full model: %d rounds (%.0fs)", rounds, t())
+    return m
+
+
+def predict_test(st: dict, X: np.ndarray) -> np.ndarray:
+    if st.get("full_model") is not None:
+        return st["full_model"].predict(X)
+    return np.mean([m.predict(X, num_iteration=m.best_iteration) for m in st["models"]], axis=0)
+
+
 def pred_dir(cfg):
     d = os.path.join(cfg["paths"]["artifacts"], "pred")
     os.makedirs(d, exist_ok=True)
@@ -61,7 +80,8 @@ def run(cfg: dict, split: str = "dev") -> dict:
             log.info("stage A fold %d: best_iter %d (%.0fs)", f, m.best_iteration, t())
         imp = pd.Series(np.mean([m.feature_importance("gain") for m in models], axis=0), index=cols)
         imp = (imp / imp.sum()).sort_values(ascending=False)
-        pickle.dump({"models": models, "cols": cols, "iters": iters}, open(model_path, "wb"))
+        full = train_full(cfg, X, y, iters, t)
+        pickle.dump({"models": models, "cols": cols, "iters": iters, "full_model": full}, open(model_path, "wb"))
         for c in cs:
             m = df["_c"].to_numpy() == c
             out = pd.DataFrame({"qi": df["qi"][m], "ri": df["ri"][m], "y": df["y"][m], "p": oof[m]})
@@ -76,7 +96,7 @@ def run(cfg: dict, split: str = "dev") -> dict:
         for c in cs:
             df = pd.read_parquet(os.path.join(fd, f"test_{c}.parquet"))
             X = df[st["cols"]].to_numpy(np.float32)
-            p = np.mean([m.predict(X, num_iteration=m.best_iteration) for m in st["models"]], axis=0)
+            p = predict_test(st, X)
             out = pd.DataFrame({"qi": df["qi"], "ri": df["ri"], "p": p.astype(np.float32)})
             out.to_parquet(os.path.join(pd_, f"test_{c}.parquet"), index=False)
             out.to_parquet(os.path.join(pd_, f"test_{c}_stageA.parquet"), index=False)
