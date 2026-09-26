@@ -3,7 +3,7 @@
 Handoff for teammates and for any fresh Claude/Codex session after a context reset. Read this
 first, then `CLAUDE.md`. Update the "State" and "Open items" sections before you stop working.
 
-Last updated: 27 Sep 2026, 00:30 IST, by Ashutosh.
+Last updated: 27 Sep 2026, 01:15 IST, by Ashutosh.
 
 Git rule: work on your own branch, commit small and often, push the branch. Before anything goes to
 `main`, merge `origin/main` into the branch and run both test suites (repo root and
@@ -13,6 +13,14 @@ Git rule: work on your own branch, commit small and often, push the branch. Befo
 `git log origin/<branch> --since=yesterday -- <paths>`). On 26 Sep I built and validated a cross-encoder
 (14:55-19:17) that Aditya had already started as his work order T6 on `origin/adi` at 14:43; his
 in-pipeline version replaced mine at 21:21. The lanes below were only ever proposed, never confirmed.
+
+## Read first: which upload counts (organiser Q&A, re-read 27 Sep 00:45)
+
+**Final ranking = private score of our best PUBLIC upload.** Answered three times (25 Sep 18:36, 26 Sep 12:56,
+26 Sep 17:03). There is no team pick and the last upload does not count by default. Right now that is
+upload 1 (0.960). An upload replaces it only if it beats 0.960 public, and then its private score is what we
+get, overfit or not. Decision 2 below is rewritten for this. Candidate-set size is judged separately as
+**total pairs** (26 Sep 12:56).
 
 ## Where submissions come from
 
@@ -67,8 +75,9 @@ did not over-link. Dev OOF cannot see this; `src/acceptance.py` on origin/adi no
 ## Decisions (26 Sep, still valid)
 
 1. `candidate_pairs.tsv` = the pruned set the final model scores (organiser sheet, later answers win).
-2. Final pick by dev OOF per country, public LB only to catch a broken file. After upload 2, add: a
-   file that fails `src.acceptance` does not go up, whatever its OOF.
+2. ~~Final pick by dev OOF~~ Superseded by the organiser ruling above: the best public upload counts.
+   So an upload is only worth making if dev OOF (on the decoy dev) and `src.acceptance` both say it beats
+   upload 1; a failing file does not go up, whatever its OOF.
 3. Candidate set size is a ranking criterion; a change that adds candidates must show OOF gain.
 4. anyascii stays, disclosed in the methodology compliance section (Unicode table, ISC licence).
 5. Leak check 7.0-8.6% by city grouping: accept, note it in the methodology.
@@ -81,9 +90,10 @@ no owner in practice, and it holds the one deliverable we cannot ship without.
 | # | Item | Owner | Status |
 |---|---|---|---|
 | 1 | Final run (config_v5, decoy-aware dev), uploads 3-5, final pick | Aditya | in progress on origin/adi |
-| 2 | **Methodology doc.** `student_resource/docs_draft/Documentation_draft.md` (origin/adi) stops at iteration 1 (08:09 26 Sep): `[v2]` placeholders, no C7/C8, no cross-encoder, no decoy finding, no compliance section. `docs/METHODOLOGY.md` on main is a 25 Sep skeleton | unowned (proposed for Krishnkant, no activity) | open, due before 16:00 freeze |
-| 3 | Compliance section: anyascii (ISC), no libpostal, hand lists allowed, model licences (xlm-r-base MIT, mDeBERTa-v3 MIT, e5-small MIT), leak check, candidate_pairs definition | same | open |
-| 4 | Upload bookkeeping: tags `sub/d<day>-<n>` (none exist, only `dataset-v1`), `docs/EXPERIMENTS.md` rows (table is empty) | same | open |
+| 2 | **Methodology doc.** Done through iteration 5 on branch `methodology-0927` (cut from origin/adi, touches only `student_resource/docs_draft/` and `docs/`): v2/v3 numbers, C7 both directions + c7_scale table, C8, stage B, T6, upload-2 decoys + acceptance check. Every number cites a run_id. Final-run numbers are `[FINAL]` gaps (grep for it) | Ashutosh (written); Aditya fills `[FINAL]` after his last run | done except gaps |
+| 3 | Compliance section (section 7 of the draft): anyascii, libpostal, cleanco, hand lists (the draft discloses LEGAL_CANON and the regexes honestly; "all mined" was not quite true), test statistics, synthetic decoys, model licences, candidate_pairs, size = total pairs, best-public ranking, leak check | Ashutosh | done |
+| 4 | Bookkeeping: `docs/EXPERIMENTS.md` rows for upload 1, the France probe, upload 2 on `methodology-0927`. Tags **proposed, not pushed** (they sit on Aditya's commits; ask first): `git tag sub/d2-1 0beb90e && git tag sub/d2-2 341091a && git tag sub/d2-3 3334842 && git push origin sub/d2-1 sub/d2-2 sub/d2-3` | Ashutosh | rows done, tags waiting |
+| 4b | **Zip traps on origin/adi (code dir, Aditya's files, not touched):** (a) `src/package.py` defaults `--doc` to the blank organiser template; build with `--doc ../../docs_draft/Documentation_draft.md`. (b) `CODE_ITEMS` ships `config.yaml` and `config_v2.yaml` only, so the final run's `config_v5.yaml` would be missing. (c) `LICENSES.md` still says "no pretrained neural model" and lacks xgboost, torch/transformers, mDeBERTa-v3-base, XLM-R-base | Aditya | open |
 | 5 | Final zip: `python -m src.package --team <TEAM>` on origin/adi, official validator, README run on a small slice | same | 27 Sep |
 | 6 | Dense channel measurement or drop by 10:00 | Ashutosh | running |
 
