@@ -3,7 +3,7 @@
 Handoff for teammates and for any fresh Claude/Codex session after a context reset. Read this
 first, then `CLAUDE.md`. Update the "State" and "Open items" sections before you stop working.
 
-Last updated: 27 Sep 2026, 01:15 IST, by Ashutosh.
+Last updated: 27 Sep 2026, 01:30 IST, by Ashutosh.
 
 Git rule: work on your own branch, commit small and often, push the branch. Before anything goes to
 `main`, merge `origin/main` into the branch and run both test suites (repo root and
@@ -25,8 +25,10 @@ get, overfit or not. Decision 2 below is rewritten for this. Candidate-set size 
 ## Where submissions come from
 
 **`origin/adi`, not `origin/main`.** Aditya's pipeline under `student_resource/code/business_entity_resolution/`
-lives on his branch, which is 17 commits ahead of main and 18 behind (he has not merged main since
-26 Sep ~14:00). He runs it on a Kaggle T4 session (`kaggle/runner/run_on_kaggle.py`, XGBoost CUDA backend).
+lives on his branch. On 27 Sep 01:30 I merged origin/adi (through c253f72) into main (cac50f2): main's
+`student_resource/code` is now his tree plus my additive files (my superseded CE lane export renamed to
+`src/ce_lane_export.py`, since his T6 export owns `src/ce_export.py`). Anything he pushes after c253f72 is
+on adi only until the next merge; he can `git merge origin/main` without conflicts. He runs it on a Kaggle T4 session (`kaggle/runner/run_on_kaggle.py`, XGBoost CUDA backend).
 Read his files there: `git show origin/adi:<path>`. His `student_resource/PROGRESS_REPORT.md` (stale at
 09:55 26 Sep), `runs/decoy_shift.md` and `runs/kaggle_iter3/` are the current record.
 
