@@ -30,6 +30,8 @@ Macro F0.5 over all dev-universe S1s with 1,000-resample entity bootstrap interv
 | 26 Sep 10:33 | not logged (Kaggle) | kaggle-0926-102147-decide | v3: + C7, generator/consistency features, stage B, XGBoost CUDA | 0.98049 [0.98025, 0.98073] | 0.98308 | 0.97649 | GFM, independent | Aditya | became upload 2 (public 0.938, decoy over-linking) |
 | 27 Sep ~03:50 | - | Kaggle `amlc26-pipeline` v5 and v6 | config_v5/v6: decoy dev, C7 forward, C8, cross-encoder | - | - | - | - | Aditya | both died of memory on the 31 GB sessions (stage B test held ~3 x 10 GB for India; fixed in bd71889), no file; cross-encoder bake-off fold 0: mDeBERTa-v3-base band log-loss 0.156, XLM-R-base 0.165; the stage took 3 h 10 min (`runs/france_research.md` section 6) |
 | 27 Sep 10:00 start | 081b693 | Kaggle `amlc26-pipeline-v7` | config_v7: v6 + France parse fixes, zero strip, C9; cross-encoder off | [pending] | | | | Aditya | 2x T4, XGBoost GPU; started before the memory fix bd71889 (11:21) |
+| 27 Sep 12:06 config | d542f6b | - | config_v7ce: v7 + cross-encoder on stage-A band [0.02, 0.98], mDeBERTa-v3-base only | [no run logged on origin/adi at 14:30] | | | | Aditya | sized to fit one Kaggle session; memory-lean stage A/B (bd71889) |
+| 27 Sep 14:03 config | 8e38dfc | - | config_v8: v7 on a test-like dev pool (5.81 US / 5.72 India records per query S1, was 20.3 US) | [no run logged on origin/adi at 14:30] | | | | Aditya | OOF not comparable with v1-v7 (different pool); runner now checkpoints final test probabilities |
 
 ## Leaderboard submissions (5 per day)
 
