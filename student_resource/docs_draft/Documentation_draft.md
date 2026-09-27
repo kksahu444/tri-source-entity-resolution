@@ -327,7 +327,8 @@ and the acceptance check below. [FINAL: those three numbers for the final file.]
 | v2: + transliteration, support features, stage A only | 0.97745 [0.97720, 0.97771] | 0.98009 | 0.97337 | 0.97253 | - | `0926-095450-decide` |
 | v2: stage B | 0.97898 [0.97876, 0.97923] | 0.98167 | 0.97484 | 0.97274 | - | `0926-103648-decide` |
 | v3: + C7, generator/consistency features, stage B | 0.98049 [0.98025, 0.98073] | 0.98308 | 0.97649 | 0.97424 | 0.938 (upload 2) | `kaggle-0926-102147-decide` |
-| final: config_v7 on decoy dev | [FINAL] | [FINAL] | [FINAL] | [FINAL] | [FINAL] | [FINAL run_id] |
+| final: config_v7 or v7ce on decoy dev | [FINAL] | [FINAL] | [FINAL] | [FINAL] | [FINAL] | [FINAL run_id] |
+| config_v8 on test-like decoy dev (not comparable, section 5.4) | [FINAL] | [FINAL] | [FINAL] | [FINAL] | [FINAL] | [FINAL run_id] |
 
 Oracles for v3 (`kaggle-0926-102147-decide`): perfect decisions on the retrieved candidates would score
 0.99402, and predicting every true singleton empty would score 0.98192.
