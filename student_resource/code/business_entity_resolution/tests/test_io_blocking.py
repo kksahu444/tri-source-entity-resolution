@@ -160,3 +160,17 @@ def test_crowd_and_key_channels():
     assert sorted(ri[qi == 0].tolist()) == [0, 1, 2] and (qi == 1).sum() == 10 and (qi == 2).sum() == 0
     qi, ri, skipped = key_channel(qk, rk, cap=10)
     assert set(qi.tolist()) == {0} and skipped == 1
+
+
+def test_test_like_pool_mask():
+    from src.blocking.union import test_like_pool_mask
+    dev = pd.DataFrame({"entity_id": ["S1-q", "S1-o", "S1-x"], "role": ["query", "orphan", "out"],
+                        "city_key": ["US|pune", "US|pune", "US|reno"]})
+    gt = pd.DataFrame({"s1_id": ["S1-q", "S1-o", "S1-x"], "cand_id": ["S2-a", "S2-b", "S2-c"]})
+    ids = np.array(["S2-a", "S2-b", "S2-c", "S2-d", "S2-e", "S2-f"])
+    city = np.array(["pune", "pune", "pune", "pune", "reno", "zzz"])
+    keep = test_like_pool_mask(ids, np.array(["US"] * 6), city, dev, gt, share=0.0, seed=0)
+    # query and orphan records kept, other-city S1's record dropped, ownerless kept only in a dev city
+    assert keep.tolist() == [True, True, False, True, False, False]
+    keep = test_like_pool_mask(ids, np.array(["US"] * 6), city, dev, gt, share=1.0, seed=0)
+    assert keep.tolist() == [True, True, False, True, False, True]      # unknown city sampled at share

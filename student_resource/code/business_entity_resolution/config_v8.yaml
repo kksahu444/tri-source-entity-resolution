@@ -1,0 +1,62 @@
+seed: 2026
+paths:                               # relative to code/business_entity_resolution/
+  dataset: ../../dataset
+  artifacts: ../../artifacts
+  runs: ../../runs
+  output: ../../output
+  submissions: ../../submissions
+flags:
+  ALLOW_TEST_PRED_FIT: false         # Q2
+  ALLOW_LIBPOSTAL: false             # Q1
+  ALLOW_HANDWRITTEN_LISTS: false     # Q3
+  ALLOW_LLM_AUGMENTATION: false      # Q4, keep false
+  USE_MMBERT_IN_FINAL: false         # Q6
+  COUNTRY_BLOCKING: true             # D0 block 6: 0 cross-country pairs of 7,638,365
+  HARD_ASSIGNMENT: true              # D0 block 7: 0 records matched to 2+ S1
+  TRANSLITERATE: true                # anyascii (ISC) romanisation of Indic scripts; see README open questions
+normalize:
+  legal_min_share: 0.01              # legal-form tokens: share of S1 names ending with the token (per country)
+  region_min_share: 0.0005           # S1 last address parts kept as regions
+  workers: 10
+  norm_dir: norm_tl                  # iteration 2: mined transliteration dictionary applied
+  num_markers: true                  # v7: mined numbering markers ("no"/"ndeg" = N°, France only) before house numbers
+  open_region_alias: true            # v7: label-free region aliases for countries without training pairs (departements)
+  zero_strip: true                   # v7: "0011 rue x" -> "11 rue x" in the address text (3-5% of records, all countries)
+dev:
+  city_group_share: 0.30             # share of (country, city) groups in the dev universe
+  orphan_share: 0.19                 # D0 block 2: dev S1 dropped from the queries, records kept as distractors
+  test_like_pool: true               # v8: pool = records of dev-city entities (+ ownerless records of dev cities), ~5.8 per query S1 like test
+  decoys: {enabled: true, group_size: 2, offset_max: 21, neg_share: 0.03, per_query: {US: 0.78, India: 0.11},
+           per_query_word: {US: 0.05, India: 0.05}}   # test-like dev: multi-record near-duplicate decoys (runs/decoy_shift.md)
+blocking: {k_tfidf: 30, k_bm25: 30, k_dense: 30, crowd_cap: 10, key_block_cap: 200, key_keep: 10, query_chunk: 100000,
+           c1_generate: 100, rare_df_min: 20000, rare_df_share: 0.005, key_rare_token: true,
+           reverse_empty: {enabled: true, k: 25, forward_k: 5, min_cos: 0.3}, second_hop: {enabled: false},
+           address_only: {enabled: true, k: 8, min_cos: 0.6, generate: 50},
+           reverse_all: {enabled: true, k: 3, generate: 30, min_score: 0.3}}   # v7: C9 for records no channel retrieved   # C1 rare-feature generation; C5a key uses the rarest street token
+prune: {pc_tolerance: 0.005, reverse_keep: 3}
+features: {support: true, gen: true, consistency: true}   # iteration 3: + generator-aware, anchor agreement, consistency (features only)
+cross_encoder: {enabled: false, band_lo: 0.005, band_hi: 0.995, confident_share: 0.02}   # T6: bake-off mDeBERTa-v3-base vs XLM-R-base, 1 epoch
+decision: {rule: two_threshold, max_m: 30}   # later gfm_count or gfm_indep, whichever wins out-of-fold
+france: {offset: loco_prior}                 # distribution_matching | em only if ALLOW_TEST_PRED_FIT
+
+stack_b: true                        # iteration 2: stage-B context stacking on stage-A probabilities
+# iteration 3: C7 reverse name channel for empty-address records (error analysis: 59% of blocking loss);
+# C6 second-hop off (measured: recovers ~5% of misses for ~4 extra candidates per S1)
+stack_b_test_context: per_fold      # work order T2: stage-B test context from each stage-A fold model; no full-data refit
+# iteration 4: C7 top-25 (was 10); C8 address-only retrieval (T4 error budget: "name replaced" = 26-27% of
+# blocking misses); cross-encoder logit as a stage-B feature, kept only if the paired bootstrap on dev says so
+# final run (config_v5) = v4 + C7 forward pass (each S1 takes its top-5 empty-address records; measured on a
+# test-sized pool in runs/c7_scale.md: reverse-only PC on blank-address targets 0.90 dev -> 0.77 test size, 0.90 with forward)
+# + test-like dev: synthetic multi-record near-duplicate decoy entities in the dev pool at the rate measured on test
+#   (upload 2: 0.938 public vs upload 1 0.960; stage-B/support features over-linked test decoys); decide starts from
+#   stage A and adopts stage B / cross-encoder only on a paired-bootstrap gain on this dev
+# config_v6 = v5 + word-changed decoy entities (first word kept, one word replaced/added; France test 0.30 group
+# records per S1, US 0.033, India 0.080; runs/decoy_shift.md section 7)
+# config_v7 = v6 + France findings (runs/france_research.md): N° numbering markers and departement aliases mined
+# without labels (French city parse 89% -> 96%, street recovered on 12% of records), zero-padded house numbers in the
+# address text, C9 reverse channel for records no channel retrieved (France 4.1% of records, US 2.6%); cross-encoder
+# off to fit the day (the v5 GPU kernel measures it)
+# config_v8 = v7 + test-like dev pool: every train record of the country used to sit in the dev pool (20 records per
+# query S1, 10.7 of them owned by other cities' S1s) against ~5.5 per S1 on test, so name-only evidence met ~8x the
+# look-alikes it meets on test; now 5.8 (US) / 5.7 (India) per query S1, every true pair kept. Dev OOF is not
+# comparable with v7 and earlier (a different, test-like pool)
