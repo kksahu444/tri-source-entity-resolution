@@ -1,7 +1,7 @@
 # ML Challenge 2026: Business Entity Resolution Solution
 
-**Team Name:** [team name]
-**Team Members:** [members]
+**Team Name:** Shashwat
+**Team Members:** Krishnkant Sahu (team leader), Ashutosh Sharma, Rickarya Das, Aditya Singh
 **Submission Date:** 27 Sep 2026
 
 Every number below cites the `run_id` of the row in `runs/run_log.csv` that produced it (or the audit
