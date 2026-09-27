@@ -2,14 +2,16 @@
 
 ## Models
 
-The submitted pipeline uses no pretrained neural model: every learned component is a LightGBM
-gradient-boosted tree model (MIT) trained from scratch on the provided training data.
+Every learned component is trained here on the provided training data. Tree models: LightGBM (MIT) or,
+on a GPU, XGBoost (Apache-2.0). The optional cross-encoder fine-tunes a public pretrained backbone.
 
 | Component | Licence | Parameters | Status |
 |---|---|---|---|
-| LightGBM pruner, stage A, stage B, count model | MIT (library) | tree ensembles trained here | in the submitted pipeline |
-| intfloat/multilingual-e5-small | MIT | 118M | optional dense channel C4 (Kaggle kernel `kaggle/dense`), not in the current submission |
-| BAAI/bge-m3 | MIT | 568M | optional dense channel C4 if it fits the 3 h encoding budget, not in the current submission |
+| Pruner, stage A, stage B, count model | LightGBM MIT / XGBoost Apache-2.0 (libraries) | tree ensembles trained here | in the pipeline |
+| microsoft/mdeberta-v3-base | MIT | 278M | cross-encoder bake-off candidate (stage `ce`), used only if it wins the bake-off and the cross-encoder variant wins on dev |
+| FacebookAI/xlm-roberta-base | MIT | 278M | cross-encoder bake-off candidate (stage `ce`), same condition |
+| intfloat/multilingual-e5-small | MIT | 118M | optional dense channel C4 (Kaggle kernel `kaggle/dense`), not in the pipeline |
+| BAAI/bge-m3 | MIT | 568M | optional dense channel C4, not in the pipeline |
 
 No model outside MIT / Apache-2.0, and none above 8B parameters, is used anywhere.
 
@@ -31,3 +33,7 @@ No model outside MIT / Apache-2.0, and none above 8B parameters, is used anywher
 | scikit-learn    | 1.7.2   | BSD-3-Clause                                    | https://scikit-learn.org                    |
 | scipy           | 1.16.3  | BSD License                                     | https://scipy.org/                          |
 | sparse-dot-topn | 1.2.0   | Apache Software License                         | https://github.com/ing-bank/sparse_dot_topn |
+| xgboost         | 3.4.1   | Apache-2.0                                      | https://github.com/dmlc/xgboost             |
+
+GPU-only extras (`requirements-gpu.txt`, cross-encoder stage): torch (BSD-3-Clause), transformers
+(Apache-2.0), sentencepiece (Apache-2.0), protobuf (BSD-3-Clause), in the versions of the Kaggle GPU image.

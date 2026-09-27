@@ -31,6 +31,8 @@ def load_config(path: str = "config.yaml") -> dict:
         cfg = yaml.safe_load(f)
     for k, v in cfg["paths"].items():
         cfg["paths"][k] = os.path.normpath(os.path.join(ROOT, v))
+        if k != "dataset":
+            os.makedirs(cfg["paths"][k], exist_ok=True)
     cfg["_hash"] = hashlib.sha1(json.dumps(cfg, sort_keys=True, default=str).encode()).hexdigest()[:10]
     return cfg
 

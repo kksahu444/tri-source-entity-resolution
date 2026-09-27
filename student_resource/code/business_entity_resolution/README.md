@@ -10,63 +10,88 @@ records of the same business. Every number quoted in the methodology document co
 student_resource/
   dataset/{train,test}/            organiser data (not shipped)
   utils/validate_submission.py     organiser validator
-  code/business_entity_resolution/ this folder (src/, tests/, config.yaml, requirements.txt)
+  code/business_entity_resolution/ this folder (src/, tests/, kaggle/, config*.yaml, requirements.txt)
   artifacts/                       parquet intermediates and models (not shipped)
-  runs/                            run_log.csv, audits, stage reports
+  runs/                            run_log.csv, audits, stage reports (decoy_shift.md, acceptance.jsonl, ...)
   output/                          matching_results.tsv, candidate_pairs.tsv
-  submissions/                     every uploaded file, archived by run_id, plus manifest.csv
+  submissions/                     every uploaded file plus manifest.csv
 ```
 
 ## Environment
 
-Python 3.12, CPU only for the tree-model pipeline:
+Python 3.12. The tree-model pipeline runs on CPU (LightGBM). With a CUDA GPU the tree models can use
+XGBoost (`model: {backend: xgboost_gpu}`), and the optional cross-encoder stage needs one or two GPUs
+(it was run on Kaggle with 2x T4, see `kaggle/runner/`).
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements.txt            # torch + transformers only for the cross-encoder stage
 python -m pytest -q tests
-python src/decision/f05_decision_rule.py     # must print "count-tilted GFM vs brute force: mismatches = 0 / 200"
+python src/decision/f05_decision_rule.py   # must print "count-tilted GFM vs brute force: mismatches = 0 / 200"
 ```
 
-## Commands (run from this folder)
+## Full run (final configuration)
 
 ```bash
-# audits (from student_resource/)
-python code/business_entity_resolution/src/audit_d0.py --root dataset > runs/d0_audit.txt
-python code/business_entity_resolution/src/france_audit.py --root dataset > runs/france_audit.txt
-
-# pipeline
-python -m src.run_pipeline --stage prep                      # D1: vocabularies + normalised parquet
-python -m src.run_pipeline --stage block --split dev --frac 0.01   # 1% benchmark, projected runtime
-python -m src.run_pipeline --stage block --split dev         # D2 on the dev universe, pair completeness
-python -m src.run_pipeline --stage features --split dev      # D3 pruner (OOF) + D4 features
-python -m src.run_pipeline --stage stack --split dev         # D6 stage A, 5-fold OOF
-python -m src.run_pipeline --stage decide --split dev        # D6-D8 calibration, assignment, thresholds, OOF F0.5
-python -m src.run_pipeline --stage loco --split dev          # D9 leave-one-country-out prior for France
-python -m src.run_pipeline --stage block --split test
-python -m src.run_pipeline --stage features --split test
-python -m src.run_pipeline --stage stack --split test
-python -m src.run_pipeline --stage decide --split test
-python -m src.run_pipeline --stage submit --split test       # writes output/, runs the validator (must PASS)
+python -m src.run_pipeline --config config_v6.yaml --stage all
 ```
+
+`--stage all` runs: prep, translit, then on the dev universe block, features, stack, [ce], stackb, decide,
+then the same on test, then submit (writes `output/` and runs the organiser validator). The final file
+must then pass the acceptance check before it is uploaded:
+
+```bash
+python -m src.acceptance --config config_v6.yaml --file ../../output/matching_results.tsv
+```
+
+Each stage can also run alone, e.g. `python -m src.run_pipeline --config config_v6.yaml --stage block --split dev`.
+Full run times: about 9.5 h on a 4-core CPU session, about 6 h on a Kaggle 2x T4 session plus the
+cross-encoder. On Kaggle: `kaggle/runner/run_on_kaggle.py` (reads the data and code from private datasets,
+writes `output/`, `runs/` and small checkpoints to /kaggle/working).
+
+## 1% reproduction check
+
+`config_repro1pct.yaml` is `config_v6.yaml` with a dev universe of 1% of the train city groups, its own
+folders (`artifacts_repro1pct/`, `runs_repro1pct/`, `output_repro1pct/`) and no cross-encoder. It runs
+the full dev path end to end on about 17k dev queries:
+
+```bash
+python -m src.run_pipeline --config config_repro1pct.yaml --stage prep
+python -m src.run_pipeline --config config_repro1pct.yaml --stage translit
+for s in block features stack stackb decide; do
+  python -m src.run_pipeline --config config_repro1pct.yaml --stage $s --split dev
+done
+```
+
+`runs_repro1pct/run_log.csv` then holds one row per stage, the last with the dev OOF macro F0.5
+(noisier than the full run's, which uses 30% of the city groups). Prep normalises all six files and is the
+slowest step (about 20 minutes with 10 workers).
 
 ## Stages
 
-| Stage | Spec | What it does |
-|---|---|---|
-| prep | D1 | View A (NFKC + spaces) and view B (fold, junk flags, legal field, DBA split, order-invariant address parts) for all six files; legal forms, regions and region aliases mined from the data |
-| block | D2 | Per country: C1 joint TF-IDF (name char 3-grams + address words, exact top-k), C2 name crowd ranked by address, C5 hash keys (house + street, first name token + city); union with every channel's score and rank |
-| features | D3, D4 | Pruner LightGBM on cheap features (OOF), top-N per S1 plus each record's top 3 S1s; full pair features on the pruned set |
-| stack | D6 | Stage-A LightGBM, 5-fold out-of-fold by city groups; test = mean of the fold models |
-| decide | D6-D8 | Isotonic calibration, one S1 per record, two-threshold rule per country (France: pooled thresholds + offset) |
-| loco | D9 | Leave-one-country-out oracle offsets; b_FR = their mean |
-| submit | 10 | Writer, organiser validator, archive under submissions/ |
+| Stage | What it does |
+|---|---|
+| prep | View A (NFKC + spaces) and view B (fold, junk flags, legal field, DBA split, order-invariant address parts) for all six files; legal forms, regions and region aliases mined from the data |
+| translit | Transliteration dictionary mined from aligned train pairs, applied to non-Latin S2/S3 names |
+| block | Per country: C1 joint TF-IDF (rare-feature generation, exact rescoring), C2 name crowd, C5 keys, C7 empty-address name channel (reverse + forward), C8 address-only channel; on dev, synthetic decoy entities are added to the pool (`dev.decoys`, see runs/decoy_shift.md) |
+| features | Pruner (OOF) to the top 8 per S1 plus each record's top 3 S1s; pair features on the pruned set (string, address, house-number, support, generator-aware, consistency) |
+| stack | Stage A gradient boosting, 5-fold out-of-fold by city groups; test = per-fold predictions |
+| ce | Optional cross-encoder on the uncertain band (mDeBERTa-v3-base vs XLM-R-base bake-off, 3 grouped folds); any failure leaves the pipeline running without it |
+| stackb | Stage B: stage-A context features (+ cross-encoder logit when present), trained with and without it on the same folds |
+| decide | Isotonic calibration, one S1 per record, rules (two thresholds, GFM, count-tilted GFM) scored per entity; variants stage A -> stage B -> cross-encoder, each adopted only if the paired bootstrap interval of its gain excludes zero |
+| submit | Writer, organiser validator, archive under submissions/ |
+
+Tools: `src.acceptance` (decoy-link check against train truth), `src.stage_upload` (download a Kaggle
+run, validator + acceptance, copy to submissions/, manifest row), `src.error_analysis`, `src.transfer`,
+`src.ablate`.
 
 ## Compliance
 
-- No external data or services. Vocabularies (legal forms, regions, region aliases) are mined from the
-  provided files; the only fixed lists are the problem statement's examples and the tag words the
-  spec itself names.
+- No external data or services. Vocabularies (legal forms, regions, region aliases, name endings and name
+  words for the synthetic decoys) are mined from the provided files; the only fixed lists are the problem
+  statement's examples and the tag words the spec itself names.
 - Non-Latin scripts (Devanagari, Kannada, Telugu, Tamil, Bengali, Gujarati in India S2/S3) are
   romanised with the `anyascii` library (ISC licence, a Unicode transliteration table, no model).
-  Flag `TRANSLITERATE` in config.yaml. Open question for the organisers alongside Q3.
+  Flag `TRANSLITERATE` in the config.
+- The cross-encoder backbones (mDeBERTa-v3-base, XLM-R-base) are pretrained public models fine-tuned only
+  on the provided training data.
 - Libraries and licences: see LICENSES.md.

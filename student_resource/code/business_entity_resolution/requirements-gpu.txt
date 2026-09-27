@@ -1,0 +1,6 @@
+# cross-encoder stage (GPU); the Kaggle GPU image ships compatible versions
+-r requirements.txt
+torch>=2.4
+transformers>=4.44
+sentencepiece
+protobuf

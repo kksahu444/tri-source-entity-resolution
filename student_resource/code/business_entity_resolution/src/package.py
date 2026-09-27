@@ -10,7 +10,7 @@ import zipfile
 
 from .utils import ROOT, load_config
 
-CODE_ITEMS = ["src", "tests", "kaggle", "README.md", "requirements.txt", "config.yaml", "config_v2.yaml", "LICENSES.md"]
+CODE_ITEMS = ["src", "tests", "kaggle", "README.md", "requirements.txt", "requirements-gpu.txt", "LICENSES.md"]
 
 
 def main(argv=None):
@@ -28,7 +28,8 @@ def main(argv=None):
             p = os.path.join(cfg["paths"]["output"], name)
             assert os.path.exists(p), f"missing {p}"
             z.write(p, f"output/{name}")
-        for item in CODE_ITEMS:
+        for item in CODE_ITEMS + sorted(f for f in os.listdir(ROOT) if f.startswith("config") and f.endswith(".yaml")
+                                        and f != "config_kaggle.yaml"):
             src = os.path.join(ROOT, item)
             if os.path.isfile(src):
                 z.write(src, f"code/business_entity_resolution/{item}")
