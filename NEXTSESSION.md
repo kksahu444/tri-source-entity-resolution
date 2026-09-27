@@ -3,7 +3,7 @@
 Handoff for teammates and for any fresh Claude/Codex session after a context reset. Read this
 first, then `CLAUDE.md`. Update the "State" and "Open items" sections before you stop working.
 
-Last updated: 27 Sep 2026, 14:40 IST, by Ashutosh.
+Last updated: 27 Sep 2026, 14:50 IST, by Ashutosh.
 
 Git rule: work on your own branch, commit small and often, push the branch. Before anything goes to
 `main`, merge `origin/main` into the branch and run both test suites (repo root and
@@ -40,7 +40,7 @@ lives on his branch. On 27 Sep 01:30 I merged origin/adi (through c253f72) into 
 the submission tree (standalone CE lane `src/ce_pairs.py`, `src/ce_lane_export.py`, `kaggle/ce/`, its test,
 and the C4 kernel `kaggle/dense_ds/`); they stay in history on the `cross-encoder` and `dense-channel` branches. Anything he pushes after c253f72 is
 on adi only until the next merge; he can `git merge origin/main` without conflicts (re-checked with
-`git merge-tree` at 14:30 on 27 Sep). **At 14:30 adi lacks 22 commits of main**, among them the latest
+`git merge-tree` at 14:50 on 27 Sep). **At 14:50 adi lacks 44 commits of methodology-0927**, among them the latest
 Documentation_draft.md and the `src.package` guard against `[FINAL` gaps (78c9a18). A zip built on adi without
 that merge ships the older doc and no guard, so merge origin/main (or methodology-0927) into adi before
 `python -m src.package`. He runs it on a Kaggle T4 session (`kaggle/runner/run_on_kaggle.py`, XGBoost CUDA backend).
