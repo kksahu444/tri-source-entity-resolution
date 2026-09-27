@@ -433,9 +433,9 @@ mostly right on test.
 ownerless records with no known city sampled at the dev-city share; it drops records of S1s outside the dev
 universe and ownerless records of other cities. That gives 5.81 (US) and 5.72 (India) records per query S1
 with every true pair kept. Test blocking is unchanged. Dev OOF under v8 is measured on a different pool, so
-it is not comparable with the v1-v7 rows; the decision between v7 and v8 has to come from the paired
-comparison, `src.acceptance` and `src.france_checks` on the test files. [FINAL: v8 dev OOF and whether it
-was uploaded.]
+it is not comparable with the v1-v7 rows, and a paired bootstrap across the two pools would compare
+different questions. Between v7 and v8 the evidence is the test files themselves: `src.acceptance`,
+`src.france_checks` and the public score. [FINAL: v8 dev OOF and whether it was uploaded.]
 
 ---
 
