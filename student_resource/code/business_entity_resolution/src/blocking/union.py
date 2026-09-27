@@ -107,6 +107,28 @@ def address_only_channel(qa, ra, k: int, min_cos: float, generate: int, cap: int
     return aq.astype(np.int32), ar.astype(np.int32)
 
 
+def reverse_all_channel(rec_idx: np.ndarray, qn, qa, rn, ra, k: int, generate: int, cap: int, chunk: int,
+                        min_score: float = 0.0):
+    """C9: the given records retrieve their top-k S1s by the C1 score (mean of name and address cosines),
+    candidates generated on S1 features with df <= cap and rescored exactly. On dense streets full of
+    same-name businesses (France: 41 S1s per street, up to 420 S1s with one name in a city) a record with a
+    misspelt street falls outside every S1's top-k list (test France: 4.1% of records in no list, US 2.6%),
+    while its own best S1s are few. Returns (qi, ri) int32 arrays."""
+    if len(rec_idx) == 0:
+        return np.zeros(0, np.int32), np.zeros(0, np.int32)
+    qc_t = combined(qn, qa).T.tocsr()
+    qc_t = sp.csr_matrix(sp.diags((np.diff(qc_t.indptr) <= cap).astype(np.float32)) @ qc_t)
+    qc_t.eliminate_zeros()
+    rc = combined(rn[rec_idx], ra[rec_idx])
+    gl, gq, _ = topk(rc, qc_t, generate, threshold=0.0, chunk=chunk)
+    del rc, qc_t
+    gr = rec_idx[gl]
+    s = 0.5 * (pair_cos(qn, rn, gq, gr) + pair_cos(qa, ra, gq, gr))
+    keep = s >= min_score
+    br, bq, _ = _topn_per_q(gr[keep], gq[keep], s[keep], k)
+    return bq.astype(np.int32), br.astype(np.int32)
+
+
 TOKEN = re.compile(r"[^\W_]+", re.UNICODE)
 
 
@@ -375,6 +397,20 @@ def block_country(cfg, q: pd.DataFrame, r: pd.DataFrame) -> tuple[pd.DataFrame, 
                                            cap, bc["query_chunk"])
         info["t_c8"] = t()
         log.info("  C8: %s pairs (%.0fs)", f"{len(chans['c8'][0]):,}", t())
+    ra_cfg = bc.get("reverse_all") or {}
+    if ra_cfg.get("enabled", False):
+        # only records no other channel retrieved, located in a city some S1 of this country sits in (on dev
+        # this leaves out the other cities' distractor records, which have no S1 to find)
+        covered = np.zeros(len(r), bool)
+        for _, b in chans.values():
+            covered[b] = True
+        in_city = r["city"].isin(set(q["city"]) - {""}).to_numpy()
+        orph = np.flatnonzero(~covered & in_city & (r["addr_core"].to_numpy() != ""))
+        chans["c9"] = reverse_all_channel(orph, qn, qa, rn, ra, ra_cfg.get("k", 3), ra_cfg.get("generate", 30), cap,
+                                          bc["query_chunk"], ra_cfg.get("min_score", 0.3))
+        info["c9_records"] = int(len(orph))
+        info["t_c9"] = t()
+        log.info("  C9: %s pairs from %s uncovered records (%.0fs)", f"{len(chans['c9'][0]):,}", f"{len(orph):,}", t())
     sh = bc.get("second_hop") or {}
     if sh.get("enabled", False):
         # C6: expand from confident first-pass pairs through exact record keys (query expansion)

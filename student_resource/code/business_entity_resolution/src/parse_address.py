@@ -11,6 +11,8 @@ DIGITS = re.compile(r"\d+")
 LANDMARK = re.compile(r"^(?:near|opp|opposite|behind|next to|beside)\b|\bke paa?s\b")
 UNIT = re.compile(r"^(?:unit|suite|fl|flr|floor|ofc|office)\b")
 HOUSE = re.compile(r"^(\d+)(?:\s*(bis|ter)\b|([a-z])\b)?")
+MARKER = re.compile(r"^([a-z]{1,4}) ?(?=\d)")
+LEAD_ZEROS = re.compile(r"(?<![0-9])0+(?=[0-9])")
 
 FIELDS = ("addr_b", "addr_core", "house", "house_sfx", "street", "city", "region", "unit", "landmark",
           "nums", "n_parts")
@@ -26,12 +28,29 @@ def strip_zeros(d: str) -> str:
     return d.lstrip("0") or "0"
 
 
-def parse_address(folded: str, regions: dict[str, str]) -> tuple:
+def strip_marker(part: str, markers: frozenset) -> str:
+    """Drop a numbering marker in front of the house number ("no 5 r x" / "ndeg5 r x" -> "5 r x").
+
+    ``markers`` is mined per country (prep.numbering_markers); without it a part like "no 5 rue x" is not
+    read as the house part, so its street is lost and the part can even be taken for the city.
+    """
+    if markers and (m := MARKER.match(part)) and m.group(1) in markers:
+        return part[m.end():]
+    return part
+
+
+def parse_address(folded: str, regions: dict[str, str], markers: frozenset = frozenset(),
+                  zero_strip: bool = False) -> tuple:
     """``folded``: lower-cased, accent-folded address. ``regions``: part text -> canonical region.
+    ``markers``: numbering-marker tokens stripped from the start of a part. ``zero_strip``: drop leading zeros
+    of numbers in the address text too ("0011 rue x" -> "11 rue x"), as house and nums already do, so the
+    word-level address index matches the house number (3-5% of records in every country are zero-padded).
 
     Returns a tuple aligned with FIELDS.
     """
-    parts = [c for c in (clean_part(p) for p in folded.split(",")) if c]
+    parts = [strip_marker(c, markers) for c in (clean_part(p) for p in folded.split(",")) if c]
+    if zero_strip:
+        parts = [LEAD_ZEROS.sub("", p) for p in parts]
     if not parts:
         return ("", "", "", "", "", "", "", "", "", "", 0)
     tags = []

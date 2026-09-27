@@ -168,6 +168,8 @@ def _init_worker(vocab: dict, translit: bool) -> None:
     _W["regions"] = {c: {r: r for r in v} for c, v in vocab["regions"].items()}
     for c, alias in vocab.get("region_alias", {}).items():
         _W["regions"].setdefault(c, {}).update(alias)
+    _W["markers"] = {c: frozenset(v) for c, v in vocab.get("num_markers", {}).items()}
+    _W["zero_strip"] = bool(vocab.get("addr_opts", {}).get("zero_strip", False))
     _W["translit"] = translit
 
 
@@ -183,7 +185,8 @@ def _norm_chunk(args):
         nonlatin = int(any(ord(ch) > 0x24F for ch in n))
         rows.append((" ".join(main), " ".join(core), " ".join(sorted(set(legal))), " ".join(alt_core),
                      flags["f_tag"], flags["f_lead"], flags["f_bang"], flags["f_digits"], nonlatin)
-                    + parse_address(fold(a, _W["translit"]), _W["regions"].get(c, empty_reg)))
+                    + parse_address(fold(a, _W["translit"]), _W["regions"].get(c, empty_reg),
+                                    _W.get("markers", {}).get(c, empty_legal), _W.get("zero_strip", False)))
     return rows
 
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from collections import Counter
 
 import numpy as np
@@ -57,6 +58,101 @@ def mine_region_alias(cfg: dict, vocab: dict, n_pairs: int = 400_000) -> dict:
     return alias
 
 
+FIRST_TOK = re.compile(r"^([a-z]{1,4})(?= |\d|$)")
+MARKED_STREET = re.compile(r"^([a-z]{1,4}) ?\d+[a-z]? [a-z]{2,}")
+
+
+def numbering_markers(parts_lists, min_count: int = 200, min_share: float = 0.5) -> list[str]:
+    """Numbering markers ("no", "ndeg" from N°): part-initial tokens of <= 4 letters followed by a number and
+    street words ("no 5 r etienne marcel") in >= ``min_share`` of their part-initial uses and >= ``min_count``
+    times. Unit parts ("apt 5", "fl 2") carry no street words, so unit words are not markers."""
+    marked, anyf = Counter(), Counter()
+    for parts in parts_lists:
+        for p in parts:
+            if (m := FIRST_TOK.match(p)):
+                anyf[m.group(1)] += 1
+                if MARKED_STREET.match(p):
+                    marked[m.group(1)] += 1
+    return sorted(t for t, n in marked.items() if n >= min_count and n / anyf[t] >= min_share)
+
+
+def open_region_alias(s1_parts, rec_parts, regions: set, min_count: int = 30) -> dict:
+    """Region spellings for a country without labelled pairs, from its S1 and record addresses only.
+
+    The S1 table maps each city to its region (a digit-free part beside exactly one region part, >= 5 times,
+    purity >= 0.9). A record part is an alias of region R when it is not a city, has no digits, sits last in
+    >= half of its records, co-occurs (in records without a region part) with cities of R only (>= min_count,
+    purity >= 0.9), and appears together with a region part in <= 10% of its records: a department written
+    in place of the region ("nord" for "hauts de france"). Without it the department is taken for the city
+    whenever the city comes first ("lille, 94 r jules valles, nord").
+    """
+    cr, tot = Counter(), Counter()
+    for ps in s1_parts:
+        rs = [p for p in ps if p in regions]
+        if len(rs) != 1:
+            continue
+        for p in ps:
+            if p not in regions and not p[:1].isdigit():
+                cr[(p, rs[0])] += 1
+                tot[p] += 1
+    city = {p: R for (p, R), n in cr.items() if n >= 5 and n / tot[p] >= 0.9}
+    seen, with_r, last, co = Counter(), Counter(), Counter(), Counter()
+    for ps in rec_parts:
+        if len(ps) < 2:
+            continue
+        has_r = any(p in regions for p in ps)
+        cities = {city[p] for p in ps if p in city}
+        for i, p in enumerate(ps):
+            if p in regions or p in city or any(ch.isdigit() for ch in p) or len(p.split()) > 3:
+                continue
+            seen[p] += 1
+            last[p] += i == len(ps) - 1
+            if has_r:
+                with_r[p] += 1
+            elif len(cities) == 1:
+                co[(p, next(iter(cities)))] += 1
+    return {p: R for (p, R), n in co.items()
+            if n >= min_count and n / max(seen[p] - with_r[p], 1) >= 0.9 and with_r[p] / seen[p] <= 0.1
+            and last[p] / seen[p] >= 0.5}
+
+
+def _address_parts(root: str, split: str, k: int, translit: bool, countries=None, sample: int = 0, seed: int = 0):
+    df = io_utils.load_source(root, split, k)[["business_address", "country"]]
+    if countries is not None:
+        df = df[df["country"].isin(countries)]
+    if sample and len(df) > sample:
+        df = df.sample(sample, random_state=seed)
+    out = {}
+    for c, g in df.groupby("country"):
+        out[c] = [_parts(a, translit) for a in g["business_address"].fillna("")]
+    return out
+
+
+def mine_address_vocab(cfg: dict, vocab: dict, train_countries: set) -> None:
+    """normalize.num_markers / normalize.open_region_alias (config_v7): label-free address vocabularies."""
+    root, translit, seed = cfg["paths"]["dataset"], cfg["flags"].get("TRANSLITERATE", True), cfg["seed"]
+    nc = cfg["normalize"]
+    rec = {}
+    for split in ("train", "test"):
+        for k in (2, 3):
+            for c, parts in _address_parts(root, split, k, translit, sample=nc.get("vocab_sample", 600_000),
+                                           seed=seed).items():
+                rec.setdefault(c, []).extend(parts)
+    if nc.get("num_markers", False) and "num_markers" not in vocab:
+        vocab["num_markers"] = {c: m for c, parts in rec.items() if (m := numbering_markers(parts))}
+    if nc.get("open_region_alias", False) and not vocab.get("open_alias_done"):
+        open_cs = [c for c in vocab["regions"] if c not in train_countries]
+        s1 = {}
+        for split in ("train", "test"):
+            for c, parts in _address_parts(root, split, 1, translit, countries=open_cs).items():
+                s1.setdefault(c, []).extend(parts)
+        for c in open_cs:
+            alias = open_region_alias(s1.get(c, []), rec.get(c, []), set(vocab["regions"][c]))
+            if alias:
+                vocab.setdefault("region_alias", {}).setdefault(c, {}).update(alias)
+        vocab["open_alias_done"] = True
+
+
 def run(cfg: dict) -> dict:
     t = Timer()
     root, art = cfg["paths"]["dataset"], cfg["paths"]["artifacts"]
@@ -71,9 +167,17 @@ def run(cfg: dict) -> dict:
         del s1
         vocab["region_alias"] = mine_region_alias(cfg, vocab)
         json.dump(vocab, open(vocab_path, "w", encoding="utf-8"), indent=1, ensure_ascii=False)
-    log.info("vocab: legal %s | regions %s | aliases %s (%.0fs)",
+    nc = cfg["normalize"]
+    if nc.get("zero_strip") and not vocab.get("addr_opts", {}).get("zero_strip"):
+        vocab.setdefault("addr_opts", {})["zero_strip"] = True        # carried to the workers with the vocabularies
+        json.dump(vocab, open(vocab_path, "w", encoding="utf-8"), indent=1, ensure_ascii=False)
+    if (nc.get("num_markers") and "num_markers" not in vocab) or (nc.get("open_region_alias") and not vocab.get("open_alias_done")):
+        train_countries = set(io_utils.load_source(root, "train", 1)["country"].unique())
+        mine_address_vocab(cfg, vocab, train_countries)
+        json.dump(vocab, open(vocab_path, "w", encoding="utf-8"), indent=1, ensure_ascii=False)
+    log.info("vocab: legal %s | regions %s | aliases %s | numbering markers %s (%.0fs)",
              {c: len(v) for c, v in vocab["legal"].items()}, {c: len(v) for c, v in vocab["regions"].items()},
-             {c: len(v) for c, v in vocab["region_alias"].items()}, t())
+             {c: len(v) for c, v in vocab["region_alias"].items()}, vocab.get("num_markers", {}), t())
     stats = {}
     with make_pool(cfg, vocab) as pool:
         for split in ("test", "train"):

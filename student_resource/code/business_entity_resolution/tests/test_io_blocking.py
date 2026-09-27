@@ -89,6 +89,46 @@ def test_reverse_name_channel():
     assert all((qi[ri == j]).size <= 3 for j in (0, 1, 2))
 
 
+def test_reverse_all_channel_every_record_gets_its_s1():
+    from src.blocking.union import reverse_all_channel
+    qn, qa = _rand_csr(40, 30, 3), _rand_csr(40, 30, 3)
+    rn = sp.vstack([qn[[5, 17, 33]], _rand_csr(6, 30, 4)], format="csr")    # records 0-2 copy S1 5, 17, 33
+    ra = sp.vstack([qa[[5, 17, 33]], _rand_csr(6, 30, 4)], format="csr")
+    rn.sort_indices(); ra.sort_indices()
+    qi, ri = reverse_all_channel(np.arange(9), qn, qa, rn, ra, k=2, generate=10, cap=10**6, chunk=4)
+    q2, r2 = reverse_all_channel(np.array([1]), qn, qa, rn, ra, k=2, generate=10, cap=10**6, chunk=4)
+    assert (17, 1) in set(zip(q2.tolist(), r2.tolist())) and set(r2.tolist()) == {1}
+    got = set(zip(qi.tolist(), ri.tolist()))
+    assert {(5, 0), (17, 1), (33, 2)} <= got
+    assert np.bincount(ri, minlength=9).max() <= 2          # at most k S1s per record
+
+
+def test_c9_recovers_misspelt_record_in_a_name_crowd():
+    from src.blocking.union import block_country
+    rng = np.random.default_rng(0)
+    words = [f"w{i:03d}x" for i in range(400)]
+    streets = [f"rue {words[i]} {words[i + 200]}" for i in range(150)]
+    n = 150                                     # 150 S1s, one name crowd on distinct streets, plus filler
+    q = pd.DataFrame({"entity_id": [f"S1-{i}" for i in range(n)], "core": ["lille club"] * 40 + [f"{words[i]} shop" for i in range(40, n)],
+                      "addr_core": [f"{i + 1} {streets[i]} lille" for i in range(n)], "house": [str(i + 1) for i in range(n)],
+                      "street": streets[:n], "city": ["lille"] * n, "src": np.int8(1)})
+    # 5 exact copies per S1 on the S1's street make every S1's top-k full of its own street's records
+    rows = [(f"{q.core[i]}", f"{i + 1} {streets[i]} lille", str(i + 1), streets[i]) for i in range(n) for _ in range(5)]
+    target = 7                                  # a misspelt copy of S1 7 ("lille club", 8 rue ...)
+    typo = streets[target].replace("x", "z")
+    rows.append(("lille club", f"{target + 1} {typo} lille", str(target + 1), typo))
+    r = pd.DataFrame({"entity_id": [f"S2-{i}" for i in range(len(rows))], "core": [x[0] for x in rows],
+                      "addr_core": [x[1] for x in rows], "house": [x[2] for x in rows], "street": [x[3] for x in rows],
+                      "city": "lille", "src": np.int8(2)})
+    bc = {"k_tfidf": 3, "crowd_cap": 2, "key_block_cap": 1, "key_keep": 1, "query_chunk": 100, "c1_generate": 5}
+    pairs, _ = block_country({"blocking": bc}, q, r)
+    t = len(r) - 1
+    assert not ((pairs.ri == t) & (pairs.qi == target)).any()          # lost without C9
+    bc["reverse_all"] = {"enabled": True, "k": 3, "generate": 50, "min_score": 0.0}
+    pairs, info = block_country({"blocking": bc}, q, r)
+    assert ((pairs.ri == t) & (pairs.qi == target) & (pairs.in_c9 == 1)).any()
+
+
 def test_c7_forward_pass_survives_query_competition():
     from src.blocking.union import block_country
     n = 60
