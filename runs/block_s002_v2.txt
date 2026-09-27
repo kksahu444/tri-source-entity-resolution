@@ -1,0 +1,285 @@
+02:21:37 entity_resolution.io train: 12,527,040 records (S1=2206821, S2=5034616, S3=5285603), labels=True
+02:21:37 entity_resolution.pipeline [train] load done in 41.1s
+02:21:38 entity_resolution.pipeline sampled 43,948 of 2,206,821 S1 records
+02:26:40 entity_resolution.blocking blocking: 880,115 candidate pairs for 17,496 S1 records (50.3 per record)
+02:26:40 entity_resolution.pipeline [train/india] 4,150,842 records done in 300.7s
+02:33:16 entity_resolution.blocking blocking: 1,158,178 candidate pairs for 26,452 S1 records (43.8 per record)
+02:33:16 entity_resolution.pipeline [train/us] 6,213,325 records done in 390.8s
+02:33:21 entity_resolution.pipeline blocking report: {
+  "n_candidate_pairs": 2038293,
+  "pair_recall": 0.9743059987761629,
+  "mean_candidates_per_s1": 46.379653226540455,
+  "upper_bound_macro_f": 0.9910069556770478,
+  "reduction_ratio": 0.9999955059429236,
+  "max_candidates_per_s1": 73,
+  "pair_recall_S2": 0.9760310713364205,
+  "pair_recall_S3": 0.9726845706116614,
+  "at_cut": {
+    "1": {
+      "n_candidate_pairs": 92281,
+      "pair_recall": 0.4700719168843474,
+      "mean_candidates_per_s1": 2.099777009192682,
+      "upper_bound_macro_f": 0.8089840318571737
+    },
+    "2": {
+      "n_candidate_pairs": 182876,
+      "pair_recall": 0.7346642014462335,
+      "mean_candidates_per_s1": 4.161190497861108,
+      "upper_bound_macro_f": 0.9245557470009539
+    },
+    "3": {
+      "n_candidate_pairs": 274249,
+      "pair_recall": 0.8562320290036255,
+      "mean_candidates_per_s1": 6.240306726130882,
+      "upper_bound_macro_f": 0.957086878612102
+    },
+    "5": {
+      "n_candidate_pairs": 457390,
+      "pair_recall": 0.9241220942091446,
+      "mean_candidates_per_s1": 10.407527077455175,
+      "upper_bound_macro_f": 0.9739323958159012
+    },
+    "10": {
+      "n_candidate_pairs": 914169,
+      "pair_recall": 0.9571854376533909,
+      "mean_candidates_per_s1": 20.80115136069901,
+      "upper_bound_macro_f": 0.9846360396124718
+    },
+    "15": {
+      "n_candidate_pairs": 1252659,
+      "pair_recall": 0.9640678769056659,
+      "mean_candidates_per_s1": 28.503208337125695,
+      "upper_bound_macro_f": 0.9869203755276234
+    },
+    "20": {
+      "n_candidate_pairs": 1570961,
+      "pair_recall": 0.9677722873253893,
+      "mean_candidates_per_s1": 35.745904250477835,
+      "upper_bound_macro_f": 0.9882190638505418
+    },
+    "30": {
+      "n_candidate_pairs": 2038293,
+      "pair_recall": 0.9743059987761629,
+      "mean_candidates_per_s1": 46.379653226540455,
+      "upper_bound_macro_f": 0.9910069556770478
+    }
+  },
+  "channels": {
+    "full_char": {
+      "pair_recall": 0.9387884011817267,
+      "only_this_recall": 0.019410321026970476,
+      "share_of_pairs": 0.573689847337944
+    },
+    "addr_word": {
+      "pair_recall": 0.7925990748843605,
+      "only_this_recall": 0.005862574927129049,
+      "share_of_pairs": 0.21044668259175692
+    },
+    "key": {
+      "pair_recall": 0.7114639329916239,
+      "only_this_recall": 0.0033030444595048064,
+      "share_of_pairs": 0.1785381198875726
+    },
+    "crowd": {
+      "pair_recall": 0.560616129647785,
+      "only_this_recall": 0.004257111086254203,
+      "share_of_pairs": 0.12029134182377116
+    },
+    "blank_name": {
+      "pair_recall": 0.03709674235595239,
+      "only_this_recall": 0.003678091340364914,
+      "share_of_pairs": 0.16493065521002132
+    },
+    "script": {
+      "pair_recall": 0.060810232858054626,
+      "only_this_recall": 0.00208578703916937,
+      "share_of_pairs": 0.14072854098993617
+    }
+  },
+  "by_country": {
+    "india": {
+      "n_candidate_pairs": 880115,
+      "pair_recall": 0.9558398950131234,
+      "mean_candidates_per_s1": 50.3037837219936,
+      "upper_bound_macro_f": 0.9834891541860283,
+      "reduction_ratio": 0.9999878297670406,
+      "max_candidates_per_s1": 68,
+      "pair_recall_S2": 0.9615943743872342,
+      "pair_recall_S3": 0.9504158567285937,
+      "at_cut": {
+        "1": {
+          "n_candidate_pairs": 36222,
+          "pair_recall": 0.4491469816272966,
+          "mean_candidates_per_s1": 2.070301783264746,
+          "upper_bound_macro_f": 0.7931105700072444
+        },
+        "2": {
+          "n_candidate_pairs": 72144,
+          "pair_recall": 0.7021489501312336,
+          "mean_candidates_per_s1": 4.1234567901234565,
+          "upper_bound_macro_f": 0.9072591225665553
+        },
+        "3": {
+          "n_candidate_pairs": 108284,
+          "pair_recall": 0.8211778215223097,
+          "mean_candidates_per_s1": 6.18907178783722,
+          "upper_bound_macro_f": 0.9415432119298561
+        },
+        "5": {
+          "n_candidate_pairs": 180666,
+          "pair_recall": 0.8919619422572178,
+          "mean_candidates_per_s1": 10.326131687242798,
+          "upper_bound_macro_f": 0.9601793581063877
+        },
+        "10": {
+          "n_candidate_pairs": 361564,
+          "pair_recall": 0.9269849081364829,
+          "mean_candidates_per_s1": 20.665523548239598,
+          "upper_bound_macro_f": 0.9719390646573955
+        },
+        "15": {
+          "n_candidate_pairs": 503297,
+          "pair_recall": 0.9355643044619423,
+          "mean_candidates_per_s1": 28.76640374942844,
+          "upper_bound_macro_f": 0.9750745373853922
+        },
+        "20": {
+          "n_candidate_pairs": 638695,
+          "pair_recall": 0.941240157480315,
+          "mean_candidates_per_s1": 36.50520118884317,
+          "upper_bound_macro_f": 0.9771923277479304
+        },
+        "30": {
+          "n_candidate_pairs": 880115,
+          "pair_recall": 0.9558398950131234,
+          "mean_candidates_per_s1": 50.3037837219936,
+          "upper_bound_macro_f": 0.9834891541860283
+        }
+      }
+    },
+    "us": {
+      "n_candidate_pairs": 1158178,
+      "pair_recall": 0.9866734050383977,
+      "mean_candidates_per_s1": 43.78413730530773,
+      "upper_bound_macro_f": 0.9959794135209492,
+      "reduction_ratio": 0.999992923058659,
+      "max_candidates_per_s1": 73,
+      "pair_recall_S2": 0.9857233646556811,
+      "pair_recall_S3": 0.9875646785767519,
+      "at_cut": {
+        "1": {
+          "n_candidate_pairs": 56059,
+          "pair_recall": 0.4840860900231815,
+          "mean_candidates_per_s1": 2.119272644790564,
+          "upper_bound_macro_f": 0.8194831279000574
+        },
+        "2": {
+          "n_candidate_pairs": 110732,
+          "pair_recall": 0.7564408213489194,
+          "mean_candidates_per_s1": 4.186148495387872,
+          "upper_bound_macro_f": 0.9359961575976666
+        },
+        "3": {
+          "n_candidate_pairs": 165965,
+          "pair_recall": 0.8797090781248283,
+          "mean_candidates_per_s1": 6.274194767881446,
+          "upper_bound_macro_f": 0.9673678400619948
+        },
+        "5": {
+          "n_candidate_pairs": 276724,
+          "pair_recall": 0.9456608914426341,
+          "mean_candidates_per_s1": 10.461363980039316,
+          "upper_bound_macro_f": 0.9830289914519834
+        },
+        "10": {
+          "n_candidate_pairs": 552605,
+          "pair_recall": 0.9774118060667318,
+          "mean_candidates_per_s1": 20.89085891425979,
+          "upper_bound_macro_f": 0.9930341295041253
+        },
+        "15": {
+          "n_candidate_pairs": 749362,
+          "pair_recall": 0.9831577328308851,
+          "mean_candidates_per_s1": 28.32912445183729,
+          "upper_bound_macro_f": 0.9947555027065317
+        },
+        "20": {
+          "n_candidate_pairs": 932266,
+          "pair_recall": 0.9855417980466046,
+          "mean_candidates_per_s1": 35.24368667775594,
+          "upper_bound_macro_f": 0.9955124168995091
+        },
+        "30": {
+          "n_candidate_pairs": 1158178,
+          "pair_recall": 0.9866734050383977,
+          "mean_candidates_per_s1": 43.78413730530773,
+          "upper_bound_macro_f": 0.9959794135209492
+        }
+      }
+    }
+  }
+}
+secs 744.8
+{
+ "n_candidate_pairs": 2038293,
+ "pair_recall": 0.9743059987761629,
+ "mean_candidates_per_s1": 46.379653226540455,
+ "upper_bound_macro_f": 0.9910069556770478,
+ "reduction_ratio": 0.9999955059429236,
+ "max_candidates_per_s1": 73,
+ "pair_recall_S2": 0.9760310713364205,
+ "pair_recall_S3": 0.9726845706116614,
+ "channels": {
+  "full_char": {
+   "pair_recall": 0.9387884011817267,
+   "only_this_recall": 0.019410321026970476,
+   "share_of_pairs": 0.573689847337944
+  },
+  "addr_word": {
+   "pair_recall": 0.7925990748843605,
+   "only_this_recall": 0.005862574927129049,
+   "share_of_pairs": 0.21044668259175692
+  },
+  "key": {
+   "pair_recall": 0.7114639329916239,
+   "only_this_recall": 0.0033030444595048064,
+   "share_of_pairs": 0.1785381198875726
+  },
+  "crowd": {
+   "pair_recall": 0.560616129647785,
+   "only_this_recall": 0.004257111086254203,
+   "share_of_pairs": 0.12029134182377116
+  },
+  "blank_name": {
+   "pair_recall": 0.03709674235595239,
+   "only_this_recall": 0.003678091340364914,
+   "share_of_pairs": 0.16493065521002132
+  },
+  "script": {
+   "pair_recall": 0.060810232858054626,
+   "only_this_recall": 0.00208578703916937,
+   "share_of_pairs": 0.14072854098993617
+  }
+ }
+}
+cut {1: (0.4701, 0.809, 2.1), 2: (0.7347, 0.9246, 4.2), 3: (0.8562, 0.9571, 6.2), 5: (0.9241, 0.9739, 10.4), 10: (0.9572, 0.9846, 20.8), 15: (0.9641, 0.9869, 28.5), 20: (0.9678, 0.9882, 35.7), 30: (0.9743, 0.991, 46.4)}
+india {'pair_recall': 0.9558, 'upper_bound_macro_f': 0.9835, 'mean_candidates_per_s1': 50.3038}
+us {'pair_recall': 0.9867, 'upper_bound_macro_f': 0.996, 'mean_candidates_per_s1': 43.7841}
+      747.42 real      3509.91 user        90.69 sys
+          8927821824  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+            23142079  page reclaims
+                1724  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+              914735  voluntary context switches
+             2663579  involuntary context switches
+       4860505464820  instructions retired
+       5363990887205  cycles elapsed
+         14569420120  peak memory footprint

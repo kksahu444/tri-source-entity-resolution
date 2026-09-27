@@ -71,28 +71,50 @@ def truth_pairs(truth: Mapping[str, Iterable[str]]) -> pd.DataFrame:
 
 
 def blocking_report(
-    cands: pd.DataFrame, truth: Mapping[str, Iterable[str]], n_s1: int, n_targets: int, beta: float = BETA
+    cands: pd.DataFrame, truth: Mapping[str, Iterable[str]], n_s1: int, n_targets: int, beta: float = BETA,
+    cuts: Iterable[int] = (1, 2, 3, 5, 10, 15, 20, 30),
 ) -> dict:
     """Recall ceiling and reduction ratio of a candidate set.
 
     ``upper_bound_macro_f`` is the score a perfect matcher would reach using only these candidates.
+    With ``blk_rank`` present, ``at_cut`` gives the same numbers for a tighter per-source cut; with
+    ``blk_mask`` present, ``channels`` gives each blocker's recall and the recall only it provides.
     """
+    from .blocking import BLOCKER_BITS  # noqa: PLC0415 (metrics stays importable without blocking deps)
+
     gt = truth_pairs(truth)
-    hit = gt.merge(cands[["s1_id", "cand_id"]].drop_duplicates(), on=["s1_id", "cand_id"], how="inner")
-    per_s1 = cands.groupby("s1_id").size()
-    n_true = pd.Series({k: len(set(v)) for k, v in truth.items()})
-    tp = hit.groupby("s1_id").size().reindex(n_true.index, fill_value=0)
-    upper = f_beta_from_counts(tp.to_numpy(), tp.to_numpy(), n_true.to_numpy(), beta).mean()
-    report = {
-        "n_candidate_pairs": int(len(cands)),
-        "pair_recall": float(len(hit) / max(len(gt), 1)),
-        "reduction_ratio": float(1 - len(cands) / max(n_s1 * n_targets, 1)),
-        "mean_candidates_per_s1": float(per_s1.reindex(n_true.index, fill_value=0).mean()),
-        "max_candidates_per_s1": int(per_s1.max()) if len(per_s1) else 0,
-        "upper_bound_macro_f": float(upper),
-    }
+    n_true = pd.Series({k: len(set(v)) for k, v in truth.items()}, dtype=float)
+    cols = ["s1_id", "cand_id"] + [c for c in ("blk_rank", "blk_mask") if c in cands.columns]
+    hit = gt.merge(cands[cols].drop_duplicates(["s1_id", "cand_id"]), on=["s1_id", "cand_id"], how="inner")
+
+    def summary(pairs: pd.DataFrame, found: pd.DataFrame) -> dict:
+        per_s1 = pairs.groupby("s1_id").size().reindex(n_true.index, fill_value=0)
+        tp = found.groupby("s1_id").size().reindex(n_true.index, fill_value=0).to_numpy()
+        return {
+            "n_candidate_pairs": int(len(pairs)),
+            "pair_recall": float(len(found) / max(len(gt), 1)),
+            "mean_candidates_per_s1": float(per_s1.mean()) if len(per_s1) else 0.0,
+            "upper_bound_macro_f": float(f_beta_from_counts(tp, tp, n_true.to_numpy(), beta).mean()),
+        }
+
+    report = summary(cands, hit)
+    report["reduction_ratio"] = float(1 - len(cands) / max(n_s1 * n_targets, 1))
+    report["max_candidates_per_s1"] = int(cands.groupby("s1_id").size().max()) if len(cands) else 0
     for src in ("S2-", "S3-"):
         gt_src = gt[gt["cand_id"].str.startswith(src)]
         hit_src = hit[hit["cand_id"].str.startswith(src)]
         report[f"pair_recall_{src[:2]}"] = float(len(hit_src) / max(len(gt_src), 1))
+    if "blk_rank" in cands.columns:
+        report["at_cut"] = {int(n): summary(cands[cands["blk_rank"] < n], hit[hit["blk_rank"] < n]) for n in cuts}
+    if "blk_mask" in cands.columns:
+        report["channels"] = {}
+        for name, bit in BLOCKER_BITS.items():
+            mask = hit["blk_mask"].to_numpy()
+            if not (cands["blk_mask"].to_numpy() & bit).any():
+                continue
+            report["channels"][name] = {
+                "pair_recall": float(((mask & bit) > 0).sum() / max(len(gt), 1)),
+                "only_this_recall": float((mask == bit).sum() / max(len(gt), 1)),
+                "share_of_pairs": float(((cands["blk_mask"].to_numpy() & bit) > 0).mean()),
+            }
     return report

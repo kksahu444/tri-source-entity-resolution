@@ -14,6 +14,9 @@ output/
 data_synthetic/
 reports/
 *.joblib
+# run logs (runs/*.txt) are kept; anything carrying dataset records stays local
+runs/**/*.parquet
+runs/*.tsv
 
 # --- python ---
 __pycache__/

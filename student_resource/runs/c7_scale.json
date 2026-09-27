@@ -1,0 +1,60 @@
+{
+ "India": {
+  "blank_records": 123008,
+  "eval_s1": 6004,
+  "blank_true_pairs": 765,
+  "sample": {
+   "n_s1": 6004,
+   "reverse_pc": 0.9765,
+   "reverse_per_s1": 153.84,
+   "forward_pc": 0.8379,
+   "forward_per_s1": 5.0,
+   "both_pc": 0.9765
+  },
+  "dev_universe": {
+   "n_s1": 198122,
+   "reverse_pc": 0.9007,
+   "reverse_per_s1": 6.1,
+   "forward_pc": 0.8379,
+   "forward_per_s1": 4.99,
+   "both_pc": 0.9307
+  },
+  "all_train_s1": {
+   "n_s1": 883188,
+   "reverse_pc": 0.7739,
+   "reverse_per_s1": 1.39,
+   "forward_pc": 0.8379,
+   "forward_per_s1": 4.99,
+   "both_pc": 0.8967
+  }
+ },
+ "US": {
+  "blank_records": 222089,
+  "eval_s1": 9021,
+  "blank_true_pairs": 1464,
+  "sample": {
+   "n_s1": 9021,
+   "reverse_pc": 0.985,
+   "reverse_per_s1": 197.21,
+   "forward_pc": 0.8292,
+   "forward_per_s1": 5.0,
+   "both_pc": 0.985
+  },
+  "dev_universe": {
+   "n_s1": 305473,
+   "reverse_pc": 0.888,
+   "reverse_per_s1": 7.2,
+   "forward_pc": 0.8292,
+   "forward_per_s1": 5.0,
+   "both_pc": 0.9105
+  },
+  "all_train_s1": {
+   "n_s1": 1323633,
+   "reverse_pc": 0.8074,
+   "reverse_per_s1": 1.67,
+   "forward_pc": 0.8292,
+   "forward_per_s1": 5.0,
+   "both_pc": 0.8784
+  }
+ }
+}
