@@ -107,6 +107,36 @@ def address_only_channel(qa, ra, k: int, min_cos: float, generate: int, cap: int
     return aq.astype(np.int32), ar.astype(np.int32)
 
 
+def test_like_pool_mask(rec_ids: np.ndarray, rec_country: np.ndarray, rec_city: np.ndarray, dev: pd.DataFrame,
+                        gt: pd.DataFrame, share: float, seed: int) -> np.ndarray:
+    """dev.test_like_pool (config_v8): keep the records a test pool would hold for the dev cities.
+
+    The dev queries are the S1s of 30% of the train cities, but every train record of the country used to be in
+    the pool: 20 records per query S1 (10.7 owned by other cities' S1s, 5.3 by no S1) against ~5.5 per S1 on
+    test, so records carrying a name and no address met ~8x the look-alikes they meet on test (dev US: exact
+    name + no house number is a true match 78% of the time, 92% without other cities' records). Kept: records of
+    query and orphan S1s; records of no S1 whose city is a dev city; records of no S1 with no known city, sampled
+    at ``share``. Dropped: records of S1s outside the dev universe, and ownerless records of other cities.
+    """
+    owner = pd.Series(gt["s1_id"].to_numpy(), index=gt["cand_id"].to_numpy())
+    role = dev.set_index("entity_id")["role"]
+    rid = pd.Index(rec_ids)
+    own_role = role.reindex(owner.reindex(rid).to_numpy()).to_numpy()          # NaN: record of no S1
+    owned = pd.notna(own_role)
+    keep = owned & np.isin(own_role.astype(str), ["query", "orphan"])
+    key = pd.Series(rec_country).astype(str) + "|" + pd.Series(rec_city).astype(str)
+    known = set(dev["city_key"])
+    chosen = set(dev.loc[dev["role"] != "out", "city_key"])
+    k = key.to_numpy()
+    in_dev_city = np.fromiter((x in chosen for x in k), bool, len(k))
+    known_city = np.fromiter((x in known for x in k), bool, len(k)) & (pd.Series(rec_city).astype(str) != "").to_numpy()
+    rng = np.random.default_rng(seed)
+    unowned = ~owned
+    keep |= unowned & in_dev_city
+    keep |= unowned & ~known_city & (rng.random(len(k)) < share)
+    return keep
+
+
 def reverse_all_channel(rec_idx: np.ndarray, qn, qa, rn, ra, k: int, generate: int, cap: int, chunk: int,
                         min_score: float = 0.0):
     """C9: the given records retrieve their top-k S1s by the C1 score (mean of name and address cosines),
@@ -500,6 +530,15 @@ def run(cfg: dict, split: str = "dev", frac: float | None = None) -> dict:
         q = q_tbl.select(BLOCK_COLS).to_pandas()
         tbl_r = pa.concat_tables([pq.read_table(norm_path(cfg, src_split, k), filters=[("country", "=", country)])
                                   for k in (2, 3)])
+        if split == "dev" and (cfg.get("dev") or {}).get("test_like_pool", False):
+            n0 = tbl_r.num_rows
+            keep = test_like_pool_mask(tbl_r["entity_id"].to_numpy(zero_copy_only=False),
+                                       tbl_r["country"].to_numpy(zero_copy_only=False),
+                                       tbl_r["city"].to_numpy(zero_copy_only=False), dev, gt,
+                                       cfg["dev"]["city_group_share"], cfg["seed"] + 11)
+            tbl_r = tbl_r.filter(pa.array(keep))
+            log.info("block dev %s: test-like pool keeps %s of %s records (%.2f per query)", country,
+                     f"{tbl_r.num_rows:,}", f"{n0:,}", tbl_r.num_rows / max(q_tbl.num_rows, 1))
         dc = (cfg.get("dev") or {}).get("decoys") or {}
         if split == "dev" and dc.get("enabled", False):
             art = cfg["paths"]["artifacts"]

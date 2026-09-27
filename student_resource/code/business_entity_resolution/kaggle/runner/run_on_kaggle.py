@@ -113,7 +113,9 @@ def main():
     ck = f"{W}/ckpt/artifacts"
     os.makedirs(ck, exist_ok=True)
     for pat in ("vocab.json", "dev_universe.parquet", "decision.pkl", "translit_dict.json", "feat/*.pkl",
-                "ce/summary.json", "ce/*_logits.parquet", "ce/FAILED", "ce/*_f?.json"):
+                "ce/summary.json", "ce/*_logits.parquet", "ce/FAILED", "ce/*_f?.json",
+                "pred/test_France.parquet", "pred/test_US.parquet", "pred/test_India.parquet",
+                "pred/test_selected.parquet"):   # final test probabilities, for decision-layer work offline
         for f in glob.glob(f"{TMP}/artifacts/{pat}"):
             dst = os.path.join(ck, os.path.relpath(f, f"{TMP}/artifacts"))
             os.makedirs(os.path.dirname(dst), exist_ok=True)
