@@ -92,8 +92,9 @@ set), so France gets its own partition without any code for it.
 | C5a key | house number + rarest street token (document frequency) | blocks > 200 records skipped; top 10 per S1 by C1 score |
 | C5b key | first core-name token + city | as above |
 | C7 empty address, reverse | name TF-IDF of records with no address against all S1 | each empty-address record takes its top-k S1s (k = 10 in iteration 3, 25 from iteration 4), cosine >= 0.3 |
-| C7 empty address, forward | same vectors, other direction | each S1 takes its top-5 empty-address records (`reverse_empty.forward_k: 5`, config_v5) |
+| C7 empty address, forward | same vectors, other direction | each S1 takes its top-5 empty-address records (`reverse_empty.forward_k: 5`, config_v5 onwards) |
 | C8 address only | address TF-IDF alone | each S1 takes its top-8 records by address cosine >= 0.6 (50 generated); aimed at "name replaced" misses, 26-27% of blocking misses in both countries (`error_budget_kaggle-0926-1219.md`) |
+| C9 uncovered records, reverse (config_v7) | C1 score (mean of name and address cosines) | only records that no other channel retrieved, that have an address, and whose city holds at least one S1 of the country; each takes its top-3 S1s (30 generated, score >= 0.3). On dense streets of same-name businesses a record with a misspelt street falls out of every S1's top-k while its own best S1s are few (commit 081b693) |
 
 ### 3.2 Why C7 needs both directions
 
@@ -116,7 +117,7 @@ Dev OOF overstates reverse-only recall on test; the forward pass is flat by cons
 always gets its own 5 slots. Both directions together add 12 points (India) and 7 points (US) of recall on
 blank-address targets at test size, for about 5 extra pairs per S1 before pruning. A dev OOF cannot show
 this gain, because on dev the reverse direction still has the recall it loses on test. It enters the final
-run for that reason (config_v5), not because of an OOF number.
+run for that reason (config_v5 onwards), not because of an OOF number.
 
 ### 3.3 Pair completeness
 
