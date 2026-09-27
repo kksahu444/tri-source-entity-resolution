@@ -3,7 +3,7 @@
 Handoff for teammates and for any fresh Claude/Codex session after a context reset. Read this
 first, then `CLAUDE.md`. Update the "State" and "Open items" sections before you stop working.
 
-Last updated: 27 Sep 2026, 01:30 IST, by Ashutosh.
+Last updated: 27 Sep 2026, 06:40 IST, by Ashutosh.
 
 Git rule: work on your own branch, commit small and often, push the branch. Before anything goes to
 `main`, merge `origin/main` into the branch and run both test suites (repo root and
@@ -97,7 +97,7 @@ no owner in practice, and it holds the one deliverable we cannot ship without.
 | 4 | Bookkeeping: `docs/EXPERIMENTS.md` rows for upload 1, the France probe, upload 2 on `methodology-0927`. Tags **proposed, not pushed** (they sit on Aditya's commits; ask first): `git tag sub/d2-1 0beb90e && git tag sub/d2-2 341091a && git tag sub/d2-3 3334842 && git push origin sub/d2-1 sub/d2-2 sub/d2-3` | Ashutosh | rows done, tags waiting |
 | 4b | **Zip traps on origin/adi (code dir, Aditya's files, not touched):** (a) `src/package.py` defaults `--doc` to the blank organiser template; build with `--doc ../../docs_draft/Documentation_draft.md`. (b) `CODE_ITEMS` ships `config.yaml` and `config_v2.yaml` only, so the final run's `config_v5.yaml` would be missing. (c) `LICENSES.md` still says "no pretrained neural model" and lacks xgboost, torch/transformers, mDeBERTa-v3-base, XLM-R-base | Aditya | open |
 | 5 | Final zip: `python -m src.package --team <TEAM>` on origin/adi, official validator, README run on a small slice | same | 27 Sep |
-| 6 | Dense channel C4: **dropped** (27 Sep 01:20). A number that could change the submission needs an OOF gain (decision 3), i.e. a full Kaggle chain with C4 ported into origin/adi's rewritten `union.py`. That run would compete with Aditya's final config_v5 run on the last day's GPU time and uploads. A PC-only number is not possible on this machine either: Aditya's prep needs the test split, which is not here, and the disk has 10 GB free. C4 also adds up to 30 pairs per S1 before pruning, and size is now judged as total pairs. Kaggle `ashuwhy/amlc26-dense` v4 was still RUNNING at 01:20; `dense_train.parquet` gets downloaded for the record if it finishes | Ashutosh | dropped |
+| 6 | Dense channel C4: **dropped** (27 Sep 01:20). A number that could change the submission needs an OOF gain (decision 3), i.e. a full Kaggle chain with C4 ported into origin/adi's rewritten `union.py`. That run would compete with Aditya's final config_v5 run on the last day's GPU time and uploads. A PC-only number is not possible on this machine either: Aditya's prep needs the test split, which is not here, and the disk has 10 GB free. C4 also adds up to 30 pairs per S1 before pruning, and size is now judged as total pairs. Kaggle `ashuwhy/amlc26-dense` v4 finished 02:08; `dense_train.parquet` (e5-small top-30 per train S1, 66,204,630 rows, 462 MB) is in `runs/dense/` on my machine, git-ignored, unmeasured. The Kaggle CLI hung on it; fetch through the MCP `download_notebook_output` URL with curl | Ashutosh | dropped |
 
 ## Resume commands
 
