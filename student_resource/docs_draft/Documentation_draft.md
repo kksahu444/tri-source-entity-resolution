@@ -230,9 +230,10 @@ DBA markers, landmark and unit words, and bis/ter (section 7).
   Any failure writes a marker and the pipeline runs without it. In the one full GPU run with the
   cross-encoder (config_v5, 27 Sep), mDeBERTa-v3-base won the fold-0 bake-off on held-out band log-loss,
   0.156 against 0.165 for XLM-R-base; the stage alone took 3 h 10 min, and the session died of memory
-  after the stage-B base folds, before a file was written (`runs/france_research.md` section 6). The
-  memory fix (stage A/B feature matrices built column by column from Arrow, prediction in 2M-row chunks,
-  commit bd71889) came after that run, so config_v7 runs with the cross-encoder off to fit the last day.
+  after the stage-B base folds, before a file was written (`runs/france_research.md` section 6). Stage A/B
+  now build their feature matrices column by column from Arrow and predict in 2M-row chunks (commit
+  bd71889), but a 3-hour stage does not fit the last day next to the France fixes, so config_v7 runs with
+  the cross-encoder off.
   [FINAL: confirm the cross-encoder is off in the final run.]
 - **Calibration:** isotonic regression on the OOF probabilities (US + India pooled); expected calibration
   error 0.00014-0.00017 after calibration (`kaggle-0926-102147-decide`).
