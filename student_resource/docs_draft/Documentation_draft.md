@@ -419,6 +419,24 @@ flags a residual that the strict check does not.
 Had this check existed on 26 Sep, upload 2 would not have gone up. From then on no file that fails it is
 uploaded, whatever its OOF.
 
+### 5.4 A dev pool that was too dense (config_v8)
+
+The dev queries are the S1s of 30% of the train city groups, but through v7 the dev pool held every train
+S2/S3 record of the country: 20.3 records per US query S1, of which 10.7 belong to S1s of other cities and
+5.3 to no S1, against 5.5-5.8 records per S1 on test. A record with a name and no usable address therefore
+met about 8 times the look-alikes it meets on test. Exact name without a house number is a true match 78% of
+the time on the dense US dev pool and 92.7% in a test-like one, and it is the largest class of missed true
+pairs (41% of dev US misses, 24% India; commit 8e38dfc). The model learned to distrust evidence that is
+mostly right on test.
+
+`dev.test_like_pool` keeps the records of query and orphan S1s, ownerless records of dev cities, and
+ownerless records with no known city sampled at the dev-city share; it drops records of S1s outside the dev
+universe and ownerless records of other cities. That gives 5.81 (US) and 5.72 (India) records per query S1
+with every true pair kept. Test blocking is unchanged. Dev OOF under v8 is measured on a different pool, so
+it is not comparable with the v1-v7 rows; the decision between v7 and v8 has to come from the paired
+comparison, `src.acceptance` and `src.france_checks` on the test files. [FINAL: v8 dev OOF and whether it
+was uploaded.]
+
 ---
 
 ## 6. Conclusion
