@@ -227,8 +227,13 @@ DBA markers, landmark and unit words, and bis/ter (section 7).
   XLM-R-base (one T4 each; lower held-out band log-loss wins); the winner trains folds 1 and 2. One epoch,
   learning rate 2e-5, batch 64. Every band pair gets an out-of-fold logit; test logits are the mean of the
   winner's fold-1 and fold-2 models. The logit enters stage B as a feature (missing outside the band).
-  Bake-off winner and held-out log-loss: [FINAL]. Any failure writes a marker and the pipeline runs without
-  it.
+  Any failure writes a marker and the pipeline runs without it. In the one full GPU run with the
+  cross-encoder (config_v5, 27 Sep), mDeBERTa-v3-base won the fold-0 bake-off on held-out band log-loss,
+  0.156 against 0.165 for XLM-R-base; the stage alone took 3 h 10 min, and the session died of memory
+  after the stage-B base folds, before a file was written (`runs/france_research.md` section 6). The
+  memory fix (stage A/B feature matrices built column by column from Arrow, prediction in 2M-row chunks,
+  commit bd71889) came after that run, so config_v7 runs with the cross-encoder off to fit the last day.
+  [FINAL: confirm the cross-encoder is off in the final run.]
 - **Calibration:** isotonic regression on the OOF probabilities (US + India pooled); expected calibration
   error 0.00014-0.00017 after calibration (`kaggle-0926-102147-decide`).
 - **Assignment:** each S2/S3 record is kept only for the S1 with its highest calibrated probability.
