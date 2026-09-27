@@ -475,12 +475,24 @@ public probe (section 4.6) puts upload 1's US + India score within 0.0023 of dev
 ### A. Code Artefacts
 
 `code/business_entity_resolution/src/run_pipeline.py` is the single entry point:
-`python -m src.run_pipeline --config config_v5.yaml --stage all` regenerates both output files from
+`python -m src.run_pipeline --config config_v7.yaml --stage all` regenerates both output files from
 `dataset/` (prep, transliteration, dev stages, test stages, submit with the organisers' validator). The
 final run used `kaggle/runner/run_on_kaggle.py` on a Kaggle GPU session [FINAL: accelerator] (the XGBoost
-CUDA backend and the cross-encoder need a GPU; everything else runs on CPU). `python -m src.acceptance --config
-config_v5.yaml --file <matching_results.tsv>` is the pre-upload check. Stage-by-stage commands, runtimes
-and hardware are in the README. [FINAL: final run wall time and hardware.]
+CUDA backend needs a GPU; with the cross-encoder off, everything else runs on CPU and nothing is
+downloaded). Stage-by-stage commands, runtimes and hardware are in the README. [FINAL: final run wall time
+and hardware.]
+
+Checks and bookkeeping around an upload, all in `src/`:
+
+| Module | What it does |
+|---|---|
+| `acceptance` | decoy-shape check of a file against train truth (section 5.3); a failing file is not uploaded |
+| `france_checks` | label-free per-country checks of a file: links per S1, empty-list rate, records in no candidate list, links per S1 by name-crowd size (section 4.6) |
+| `stage_upload` | downloads a Kaggle run, runs the organisers' validator on both files, then `acceptance` and `france_checks` against upload 1, copies the file to `submissions/` and adds a manifest row with dev OOF, kept variant and SHA-256 |
+| `compare_runs` | paired per-entity bootstrap of two runs' dev F0.5, each with the variant its own `decide` kept |
+
+`config_repro1pct.yaml` (config_v6 on 1% of the train city groups, no cross-encoder) reproduces the dev
+stages end to end on a laptop; the README gives the commands and the expected run-log rows.
 
 ### B. Additional Results
 
