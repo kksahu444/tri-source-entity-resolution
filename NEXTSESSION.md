@@ -36,8 +36,9 @@ candidate_pairs file is uploaded in the final code submission, not on the leader
 
 **`origin/adi`, not `origin/main`.** Aditya's pipeline under `student_resource/code/business_entity_resolution/`
 lives on his branch. On 27 Sep 01:30 I merged origin/adi (through c253f72) into main (cac50f2): main's
-`student_resource/code` is now his tree plus my additive files (my superseded CE lane export renamed to
-`src/ce_lane_export.py`, since his T6 export owns `src/ce_export.py`). Anything he pushes after c253f72 is
+`student_resource/code` is now his tree plus my additive files. On 27 Sep 14:45 I removed my dead ones from
+the submission tree (standalone CE lane `src/ce_pairs.py`, `src/ce_lane_export.py`, `kaggle/ce/`, its test,
+and the C4 kernel `kaggle/dense_ds/`); they stay in history on the `cross-encoder` and `dense-channel` branches. Anything he pushes after c253f72 is
 on adi only until the next merge; he can `git merge origin/main` without conflicts (re-checked with
 `git merge-tree` at 14:30 on 27 Sep). **At 14:30 adi lacks 22 commits of main**, among them the latest
 Documentation_draft.md and the `src.package` guard against `[FINAL` gaps (78c9a18). A zip built on adi without
@@ -83,7 +84,7 @@ did not over-link. Dev OOF cannot see this; `src/acceptance.py` on origin/adi no
 | Item | Status |
 |---|---|
 | Blocking v2 testbed, C7 scale study, C7 forward pass | on main; forward pass is in config_v5 |
-| Cross-encoder (`src/ce_pairs.py`, `src/ce_export.py`, `kaggle/ce/train_ce.py`) | on main; **superseded by T6**, the export/score/join path is not used. Model is in the `ashuwhy/amlc26-ce` output if anyone wants a second opinion on T6's bake-off |
+| Cross-encoder (`src/ce_pairs.py`, `src/ce_export.py`, `kaggle/ce/train_ce.py`) | **superseded by T6**; removed from main 27 Sep 14:45, kept on branch `cross-encoder`, the export/score/join path is not used. Model is in the `ashuwhy/amlc26-ce` output if anyone wants a second opinion on T6's bake-off |
 | Dense channel C4 (e5-small top-30, `blocking.dense`, off by default) | branch `dense-channel` (2 commits, touches Aditya's `features.py`, not merged). Written against main's `union.py`; Aditya rewrote his since, so it does not apply to origin/adi as is. Kaggle `ashuwhy/amlc26-dense` v4 (train split) started running 27 Sep 00:25. `dense_test.parquet` exists only in an older version's output (download from the Kaggle UI; the CLI fetches the latest version). Low value now: the loss that matters is precision, and C4 adds candidates. Cut-off stays 27 Sep 10:00 |
 | `blocking-ports`, `c7-forward`, `cross-encoder`, `blocking-v2` branches | stale or merged; nothing to do |
 | Local scratch artifacts (adi_art30, CE model copy, dense_test) | lost when /private/tmp was cleared |
