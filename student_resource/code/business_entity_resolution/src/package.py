@@ -3,7 +3,7 @@
 python -m src.package --team <TEAM> [--doc path/to/filled_Documentation_template.md]
 
 The document defaults to docs_draft/Documentation_draft.md (the filled one), not the blank organisers'
-template. A document that still holds "[FINAL" gaps is refused.
+template. A document that still holds "[FINAL" gaps or an unfilled team header is refused.
 """
 from __future__ import annotations
 
@@ -25,9 +25,12 @@ def main(argv=None):
     sr = os.path.dirname(os.path.dirname(ROOT))                       # student_resource/
     doc = args.doc or os.path.join(sr, "docs_draft", "Documentation_draft.md")
     with open(doc, encoding="utf-8") as f:
-        gaps = f.read().count("[FINAL")
+        text = f.read()
+    gaps = text.count("[FINAL")
     if gaps:
         ap.error(f"{doc} still has {gaps} [FINAL] gaps; fill them from the last run first")
+    if "[team name]" in text or "[members]" in text:
+        ap.error(f"{doc} has no team name or member list")
     cfg = load_config()
     out = args.out or os.path.join(sr, f"{args.team}_submission.zip")
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
