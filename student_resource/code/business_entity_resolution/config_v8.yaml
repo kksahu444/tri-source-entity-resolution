@@ -23,7 +23,7 @@ normalize:
   open_region_alias: true            # v7: label-free region aliases for countries without training pairs (departements)
   zero_strip: true                   # v7: "0011 rue x" -> "11 rue x" in the address text (3-5% of records, all countries)
 dev:
-  city_group_share: 0.30             # share of (country, city) groups in the dev universe
+  city_group_share: 0.45             # v8: 45% of the train cities (was 0.30): 1.5x the labelled S1s, crowds closer to test size
   orphan_share: 0.19                 # D0 block 2: dev S1 dropped from the queries, records kept as distractors
   test_like_pool: true               # v8: pool = records of dev-city entities (+ ownerless records of dev cities), ~5.8 per query S1 like test
   decoys: {enabled: true, group_size: 2, offset_max: 21, neg_share: 0.03, per_query: {US: 0.78, India: 0.11},
@@ -59,4 +59,5 @@ stack_b_test_context: per_fold      # work order T2: stage-B test context from e
 # config_v8 = v7 + test-like dev pool: every train record of the country used to sit in the dev pool (20 records per
 # query S1, 10.7 of them owned by other cities' S1s) against ~5.5 per S1 on test, so name-only evidence met ~8x the
 # look-alikes it meets on test; now 5.8 (US) / 5.7 (India) per query S1, every true pair kept. Dev OOF is not
-# comparable with v7 and earlier (a different, test-like pool)
+# comparable with v7 and earlier (a different, test-like pool). With the smaller pool the dev universe grows to 45% of the
+# train cities (cpu v4: oracle on the candidates 0.9947 vs OOF 0.97981, so the loss is in the decisions: more labels)
