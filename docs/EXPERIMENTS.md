@@ -10,7 +10,7 @@ Rules:
 Dev-universe pair completeness from `student_resource/runs/run_log.csv` (Kaggle rows from
 `runs/kaggle_iter3/run_log.csv`, cited `kaggle-`).
 
-| date/time (IST) | commit | run_id | change | PC US | PC India | cand/S1 | ran by | notes |
+| run-log timestamp | commit | run_id | change | PC US | PC India | cand/S1 | ran by | notes |
 |---|---|---|---|---|---|---|---|---|
 | 26 Sep 01:05 | 2c2274b | 0926-005620-block | 1% benchmark, full sparse product | 0.98044 | 0.92805 | 35.41 | Aditya | block_bench slice, 567 s |
 | 26 Sep 01:46 | 2e372f1 | 0926-011721-block | v1: rare-feature C1 generation | 0.97407 | 0.94293 | 36.40 | Aditya | full dev, 1,749 s |
@@ -20,9 +20,16 @@ Dev-universe pair completeness from `student_resource/runs/run_log.csv` (Kaggle 
 
 ## Model / decision runs (OOF)
 
-| date/time | commit | change | stage-1 OOF | stage-2 OOF | decision | per-country | notes |
-|---|---|---|---|---|---|---|---|
-| | | baseline | | | | | |
+Macro F0.5 over all dev-universe S1s with 1,000-resample entity bootstrap intervals, from the `decide` rows.
+
+| run-log timestamp | commit | run_id | change | OOF macro F0.5 [95% CI] | US | India | rule | ran by | notes |
+|---|---|---|---|---|---|---|---|---|---|
+| 26 Sep 04:33 | 69f4c91 | 0926-032111-decide | v1 stage A | 0.97143 [0.97114, 0.97170] | 0.97918 | 0.95949 | GFM + count model | Aditya | +0.00080 over two thresholds; became upload 1 |
+| 26 Sep 10:01 | 04669a9 | 0926-095450-decide | v2 stage A: + transliteration, support features | 0.97745 [0.97720, 0.97771] | 0.98009 | 0.97337 | GFM + count model | Aditya | India +0.014 |
+| 26 Sep 10:50 | 76ef313 | 0926-103648-decide | v2 stage B (context stacking) | 0.97898 [0.97876, 0.97923] | 0.98167 | 0.97484 | GFM, independent | Aditya | count model stops helping once stage B is in |
+| 26 Sep 10:33 | not logged (Kaggle) | kaggle-0926-102147-decide | v3: + C7, generator/consistency features, stage B, XGBoost CUDA | 0.98049 [0.98025, 0.98073] | 0.98308 | 0.97649 | GFM, independent | Aditya | became upload 2 (public 0.938, decoy over-linking) |
+| 27 Sep ~03:50 | - | Kaggle `amlc26-pipeline` v5 | config_v5: decoy dev, C7 forward, C8, cross-encoder | - | - | - | - | Aditya | died of memory after stage-B base folds, no file; cross-encoder bake-off fold 0: mDeBERTa-v3-base band log-loss 0.156, XLM-R-base 0.165; the stage took 3 h 10 min (`runs/france_research.md` section 6) |
+| 27 Sep 10:00 start | 081b693 | Kaggle `amlc26-pipeline-v7` | config_v7: v6 + France parse fixes, zero strip, C9; cross-encoder off | [pending] | | | | Aditya | 2x T4, XGBoost GPU |
 
 ## Leaderboard submissions (5 per day)
 
