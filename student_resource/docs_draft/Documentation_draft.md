@@ -150,7 +150,8 @@ India, 23.2 per S1 on dev).
 
 `candidate_pairs.tsv` is exactly this pruned set, the input of the stage-A matcher; every match is a subset
 of it (the writer asserts it, and the organisers' validator passes). The organisers measure candidate-set
-size as total pairs:
+size as total pairs, and their 27 Sep update on Unstop ranks a smaller candidate set per Source-1 entity
+higher after the leaderboard, so a channel that adds candidates has to pay for them in OOF F0.5:
 
 | File | Total candidate pairs | Per test S1 | run |
 |---|---|---|---|
