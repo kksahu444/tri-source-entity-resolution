@@ -401,7 +401,7 @@ the level of true train links by more than 50% relative (France is compared with
 A broad variant is reported next to it (`near_broad_beside`: same city and first name word, house 1-30
 higher), which catches the word-changed decoys. It is logged, not a pass/fail gate (`runs/acceptance.jsonl`):
 
-| File | US (train truth 0.011) | India (0.0169) | France (train 0.014) |
+| File | US (train truth 0.011) | India (0.0169) | France (vs 0.014) |
 |---|---|---|---|
 | Upload 1 | 0.0209 | 0.0152 | 0.0270 |
 | Upload 2 | 0.2215 | 0.0310 | 0.1628 |
@@ -438,8 +438,8 @@ topic wins).
 | cleanco | Not used | prohibited (bundles a legal-term database), 25 Sep 23:14 |
 | Transliteration | anyascii 0.3.3 (ISC licence), a Unicode character table with no geo, postal or business data | anyascii named as allowed, 25 Sep 11:44 and 18:36 |
 | Hand-written lists | Five legal words from the problem statement, regular expressions for DBA, landmark and unit words, bis/ter. No city, postal or country tables. Every other vocabulary is mined from the provided records | "small hand-written normalization dictionaries" allowed (25 Sep); state abbreviations fine, city-level or postal tables not (25 Sep 14:43); hand-typed abbreviation and legal-form lists allowed (26 Sep 12:56, 17:03) |
-| Label-free statistics on test | TF-IDF vocabularies, document frequencies, legal-form and region vocabularies mined from Source-1 text of both splits | allowed, 25 Sep 02:03; 26 Sep 12:56, 18:43 |
-| Synthetic pairs | Synthetic decoy entities in the dev pool, built from provided records only (section 5.3) | "Self-training and generating synthetic pairs from the provided records are also fine", 25 Sep 02:03 |
+| Label-free statistics on test | TF-IDF vocabularies, document frequencies, legal-form and region vocabularies mined from Source-1 text of both splits; from config_v7 also the numbering markers (address-part statistics per country) and the France region aliases (Source-1 city -> region map), neither of which uses a label or an external table | allowed, 25 Sep 02:03; 26 Sep 12:56, 18:43 |
+| Synthetic pairs | Synthetic decoy entities in the dev pool (near-house groups and word-changed names), built from provided records only (section 5.3) | "Self-training and generating synthetic pairs from the provided records are also fine", 25 Sep 02:03 |
 | Pretrained models | Only in the cross-encoder, fine-tuned on the provided training pairs only | MIT/Apache-2.0, <= 8B parameters per model, offline, fine-tuned only on provided data (25 Sep 00:04, 10:26) |
 | Country as an open set | Countries are read from the data; no feature encodes country; France runs through the same code | 25 Sep 01:42, 02:42 |
 | candidate_pairs.tsv | The pruned set fed to stage A, the first pair matcher; every matched id is in it | 25 Sep 03:14: "in a cascade, the input to the first scoring model"; 25 Sep 17:59 and 20:47: "the last candidate set fed to your matching model ... a pruned later stage is fine". We follow the later answers. The pruner scores candidates but is part of candidate generation |
@@ -452,8 +452,8 @@ topic wins).
 |---|---|---|---|
 | LightGBM / XGBoost tree ensembles | MIT / Apache-2.0 (libraries) | trained here from scratch | pruner, stage A, stage B, count model |
 | microsoft/mdeberta-v3-base | MIT | 86M backbone + 190M embeddings | cross-encoder bake-off candidate |
-| FacebookAI/xlm-roberta-base | MIT | 270M | cross-encoder bake-off candidate |
-| intfloat/multilingual-e5-small | MIT | 118M | optional dense channel C4, measured separately, not in the final run [FINAL: confirm] |
+| FacebookAI/xlm-roberta-base | MIT | 278M | cross-encoder bake-off candidate |
+| intfloat/multilingual-e5-small | MIT | 118M | dense channel C4, run as a separate Kaggle kernel on train only; dropped on 27 Sep before any OOF measurement, never in a submitted file |
 
 No model outside MIT / Apache-2.0 and none above 8B parameters is used, in training or at inference.
 
