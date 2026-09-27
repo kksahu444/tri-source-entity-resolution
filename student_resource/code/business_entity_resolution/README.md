@@ -32,21 +32,34 @@ python src/decision/f05_decision_rule.py   # must print "count-tilted GFM vs bru
 ## Full run (final configuration)
 
 ```bash
-python -m src.run_pipeline --config config_v6.yaml --stage all
+python -m src.run_pipeline --config config_v7.yaml --stage all
 ```
+
+`config_v7.yaml` produced the final file (upload 3, Kaggle kernel `amlc26-pipeline-v7b`; its run log is
+`runs/kaggle_v7b/run_log.csv`). `config_v7ce.yaml` (+ cross-encoder) and `config_v8.yaml` (+ test-like dev
+pool, 45% of the cities) are later variants that did not finish before the deadline.
 
 `--stage all` runs: prep, translit, then on the dev universe block, features, stack, [ce], stackb, decide,
 then the same on test, then submit (writes `output/` and runs the organiser validator). The final file
-must then pass the acceptance check before it is uploaded:
+must then pass the pre-upload checks before it is uploaded:
 
 ```bash
-python -m src.acceptance --config config_v6.yaml --file ../../output/matching_results.tsv
+python -m src.acceptance --config config_v7.yaml --file ../../output/matching_results.tsv     # decoy shape vs train truth
+python -m src.france_checks --config config_v7.yaml --matching ../../output/matching_results.tsv \
+    --candidates ../../output/candidate_pairs.tsv                                             # label-free, vs upload 1
+python -m src.compare_runs --a <runs dir A> --b <runs dir B>                                  # paired dev gain
 ```
 
-Each stage can also run alone, e.g. `python -m src.run_pipeline --config config_v6.yaml --stage block --split dev`.
-Full run times: about 9.5 h on a 4-core CPU session, about 6 h on a Kaggle 2x T4 session plus the
-cross-encoder. On Kaggle: `kaggle/runner/run_on_kaggle.py` (reads the data and code from private datasets,
-writes `output/`, `runs/` and small checkpoints to /kaggle/working).
+`python -m src.stage_upload` runs the validator, the acceptance check and the France checks on a downloaded
+Kaggle run and copies it to `submissions/` with a manifest row.
+
+Each stage can also run alone, e.g. `python -m src.run_pipeline --config config_v7.yaml --stage block --split dev`.
+Full run times: 262 minutes for `config_v7.yaml` on a Kaggle 2x T4 session (XGBoost CUDA, 4 cores, 31 GB);
+a 4-core CPU session with LightGBM does not finish within Kaggle's 12 h limit. On Kaggle:
+`kaggle/runner/run_on_kaggle.py` (reads the data and code from private datasets, writes `output/`, `runs/`
+and small checkpoints to /kaggle/working; `ER_CONFIG` picks the config, default `config_v7.yaml`).
+`kaggle/runner_tpu/` runs the same pipeline on a TPU VM (224 cores, CPU LightGBM) after installing
+`requirements.txt` into a virtual environment, since that image has no LightGBM and ships pandas 3.
 
 ## 1% reproduction check
 
@@ -70,10 +83,10 @@ slowest step (about 20 minutes with 10 workers).
 
 | Stage | What it does |
 |---|---|
-| prep | View A (NFKC + spaces) and view B (fold, junk flags, legal field, DBA split, order-invariant address parts) for all six files; legal forms, regions and region aliases mined from the data |
+| prep | View A (NFKC + spaces) and view B (fold, junk flags, legal field, DBA split, order-invariant address parts) for all six files; legal forms, regions and region aliases mined from the data; from config_v7 also numbering markers ("no"/"N°" before the house number), region aliases for countries without training pairs (French departments) and zero-padded numbers |
 | translit | Transliteration dictionary mined from aligned train pairs, applied to non-Latin S2/S3 names |
-| block | Per country: C1 joint TF-IDF (rare-feature generation, exact rescoring), C2 name crowd, C5 keys, C7 empty-address name channel (reverse + forward), C8 address-only channel; on dev, synthetic decoy entities are added to the pool (`dev.decoys`, see runs/decoy_shift.md) |
-| features | Pruner (OOF) to the top 8 per S1 plus each record's top 3 S1s; pair features on the pruned set (string, address, house-number, support, generator-aware, consistency) |
+| block | Per country: C1 joint TF-IDF (rare-feature generation, exact rescoring), C2 name crowd, C5 keys, C7 empty-address name channel (reverse + forward), C8 address-only channel, C9 reverse channel for records no other channel retrieved (config_v7); on dev, synthetic decoy entities are added to the pool (`dev.decoys`, see runs/decoy_shift.md) |
+| features | Pruner (OOF) to the top N per S1 (N = smallest within 0.005 PC of the union; 11 in the final run) plus each record's top 3 S1s; pair features on the pruned set (string, address, house-number, support, generator-aware, consistency) |
 | stack | Stage A gradient boosting, 5-fold out-of-fold by city groups; test = per-fold predictions |
 | ce | Optional cross-encoder on the uncertain band (mDeBERTa-v3-base vs XLM-R-base bake-off, 3 grouped folds); any failure leaves the pipeline running without it |
 | stackb | Stage B: stage-A context features (+ cross-encoder logit when present), trained with and without it on the same folds |
@@ -86,12 +99,12 @@ run, validator + acceptance, copy to submissions/, manifest row), `src.error_ana
 
 ## Compliance
 
-- No external data or services. Vocabularies (legal forms, regions, region aliases, name endings and name
-  words for the synthetic decoys) are mined from the provided files; the only fixed lists are the problem
+- No external data or services. Vocabularies (legal forms, regions, region aliases, numbering markers, name
+  endings and name words for the synthetic decoys) are mined from the provided files; the only fixed lists are the problem
   statement's examples and the tag words the spec itself names.
 - Non-Latin scripts (Devanagari, Kannada, Telugu, Tamil, Bengali, Gujarati in India S2/S3) are
   romanised with the `anyascii` library (ISC licence, a Unicode transliteration table, no model).
   Flag `TRANSLITERATE` in the config.
 - The cross-encoder backbones (mDeBERTa-v3-base, XLM-R-base) are pretrained public models fine-tuned only
-  on the provided training data.
+  on the provided training data. The cross-encoder is off in the final `config_v7.yaml`.
 - Libraries and licences: see LICENSES.md.

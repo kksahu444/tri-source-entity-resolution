@@ -6,11 +6,11 @@
 
 Every number below cites the `run_id` of the row in `runs/run_log.csv` that produced it (or the audit
 file it comes from). Iteration-3 runs were made on a Kaggle T4 session; their rows are in
-`runs/kaggle_iter3/run_log.csv` and are cited as `kaggle-<run_id>`. Out-of-fold (OOF) scores are macro
-F0.5 over all dev-universe Source-1 entities, exactly as the leaderboard computes it, with 1,000-resample
-bootstrap intervals over entities.
-
-Gaps marked **[FINAL: ...]** are filled from the last run (`config_v5.yaml`) before the zip is built.
+`runs/kaggle_iter3/run_log.csv` and are cited as `kaggle-<run_id>`. The final run (`config_v7.yaml`, Kaggle
+kernel `amlc26-pipeline-v7b`) is in `runs/kaggle_v7b/run_log.csv`, cited as `v7b-<run_id>`; the config_v5 run
+it is compared with is in `runs/kaggle_cpu_v4/run_log.csv` (`cpuv4-<run_id>`). Out-of-fold (OOF) scores are
+macro F0.5 over all dev-universe Source-1 entities, exactly as the leaderboard computes it, with
+1,000-resample bootstrap intervals over entities.
 
 ---
 
@@ -27,7 +27,12 @@ training. Our first two leaderboard uploads taught us that dev OOF can be blind 
 better-scoring model on dev (0.98049 vs 0.97143) scored lower on the public board (0.938 vs 0.960) because
 test holds groups of near-duplicate decoy businesses that dev lacked. The final run trains and selects on
 a dev set with synthetic decoys at the test rate, and every file must pass a structural acceptance check
-before upload (section 5.3).
+before upload (section 5.3). France, which has no labels, was diagnosed with label-free natural experiments
+on the test files (section 4.6). The fixes they pointed to (numbering markers and department names mined
+from the data, zero-padded numbers, a reverse retrieval pass for records no channel reached) are generic and
+also lifted India's dev pair completeness from 0.9787 (config_v5) to 0.9832; in the final file 0.3% of French
+records are in no candidate list, against 4.5% in upload 1. Final run: OOF 0.98060 [0.98037, 0.98083] on the
+decoy dev (`v7b-0927-074428-decide`), a paired gain of +0.00073 [+0.00056, +0.00090] over config_v5.
 
 ---
 
@@ -48,6 +53,9 @@ Audit outputs: `runs/d0_audit.txt`, `runs/france_audit.txt`; trigger table `runs
 | Noise in true pairs | first house number conflicts on 20.9%; last name token equal on only 40.5% | no hard vetoes; legal form is a soft feature |
 | Empty record addresses | 48% of US and 21% of India blocking misses after iteration 3 are records with no address (`runs/kaggle_iter3/error_budget_kaggle-0926-1219.md`) | a name channel for empty-address records in both directions (C7, section 3.2) |
 | France-only noise (unlabelled test audit) | "R." for Rue in 12% of French S2/S3 addresses, "St-" for Saint-, Av/Bd/Imp/Rte | a language-agnostic subsequence-abbreviation matcher instead of a French word list |
+| French address formats (label-free, `runs/france_research.md`) | "No"/"N°" before the house number in 11.5% of French S2/S3 addresses (street lost on 12.2% of records, US 1.0%); departments ("nord", "gironde") in place of the region, so the department was read as the city (city parsed correctly on 89.4% of records) | numbering markers and region aliases mined per country without labels: city parsed correctly on 96.4%, street lost on 0.3% |
+| Zero-padded house numbers | "0011 rue x" in 3.3% (France), 5.0% (US), 5.4% (India) of records; invisible to the word-level address index | leading zeros dropped in the address text, as in the house field |
+| Generic names on dense streets (France) | 26% of French S1s share their exact core name with another S1 of the same city (US 1%; 420 "lille club" in Lille), 41 S1s per street; 4.5% of French records reached no candidate list (US 2.6%) | reverse channel C9 for records no channel retrieved |
 | Near-duplicate decoys (test only) | same name and street, house number 1-30 apart, in groups of 2+ records: 0.84 group records per US S1 on test vs 0.06 on dev (`runs/decoy_shift.md`) | dev with synthetic decoys; acceptance check before upload (section 5.3) |
 
 ### 2.2 The metric has two regimes
@@ -88,6 +96,7 @@ set), so France gets its own partition without any code for it.
 | C7 empty address, reverse | name TF-IDF of records with no address against all S1 | each empty-address record takes its top-k S1s (k = 10 in iteration 3, 25 from iteration 4), cosine >= 0.3 |
 | C7 empty address, forward | same vectors, other direction | each S1 takes its top-5 empty-address records (`reverse_empty.forward_k: 5`, config_v5) |
 | C8 address only | address TF-IDF alone | each S1 takes its top-8 records by address cosine >= 0.6 (50 generated); aimed at "name replaced" misses, 26-27% of blocking misses in both countries (`error_budget_kaggle-0926-1219.md`) |
+| C9 uncovered records, reverse (final run) | C1 score (name + address) | every record that no other channel retrieved and whose city is a city of some S1 takes its top-3 S1s (30 generated, score >= 0.3). On dense streets full of same-name businesses a record with a misspelt street falls outside every S1's top-k while its own best S1s are few. Test: 41,797 (France), 25,923 (US), 114,228 (India) such records (`v7b-0927-080840-block`) |
 
 ### 3.2 Why C7 needs both directions
 
@@ -122,7 +131,8 @@ Pair completeness (PC, share of true pairs retrieved) on the dev universe:
 | v1 (rare-feature C1) | 0.9741 | 0.9429 | 36.4 | `0926-011721-block` |
 | v2 (+ transliteration dictionary, rarest-token key) | 0.9740 | 0.9640 | 36.1 | `0926-074645-block` |
 | v3 (+ C7 reverse, k = 10) | 0.9873 | 0.9759 | 42.5 | `kaggle-0926-091122-block` |
-| v5 (C7 k = 25 + forward, C8, decoy dev) | [FINAL] | [FINAL] | [FINAL] | [FINAL run_id] |
+| v5 (C7 k = 25 + forward, C8, decoy dev) | 0.99015 | 0.97872 | - | `cpuv4-0926-180739-block` |
+| **v7, final** (+ word-changed decoys, numbering markers, department aliases, zero-padded numbers, C9) | **0.99108** | **0.98324** | 55.8 | `v7b-0927-061644-block` |
 
 C7 alone retrieves 4.2% (US) and 3.5% (India) of all true pairs in v3 (`kaggle-0926-091122-block`); its
 records are the ones no other channel reaches. Reduction ratio: 0.9999933 (US), 0.9999894 (India) in v3.
@@ -132,8 +142,9 @@ records are the ones no other channel reaches. Reduction ratio: 0.9999933 (US), 
 LightGBM on channel scores/ranks and cheap similarities, trained out-of-fold. Per S1 it keeps the smallest
 top-N whose PC is within 0.005 of the union, plus each record's top 3 S1s so that the assignment step sees
 the competing entities. N = 8 in v1-v2 (`0926-020122-features`: PC after pruning 0.9739 US, 0.9424 India,
-about 20 candidates per S1 on dev) and N = 9 in v3 (`kaggle-0926-093309-features`: 0.9857 US, 0.9742
-India, 23.2 per S1 on dev).
+about 20 candidates per S1 on dev), N = 9 in v3 (`kaggle-0926-093309-features`: 0.9857 US, 0.9742
+India, 23.2 per S1 on dev) and N = 11 in the final run (`v7b-0927-064908-features`: 0.98849 US, 0.98157
+India, 25.8 / 26.5 per S1 on dev).
 
 `candidate_pairs.tsv` is exactly this pruned set, the input of the stage-A matcher; every match is a subset
 of it (the writer asserts it, and the organisers' validator passes). The organisers measure candidate-set
@@ -143,9 +154,10 @@ size as total pairs:
 |---|---|---|---|
 | Upload 1 | 25,722,619 | 14.85 | `0926-073547-submit` |
 | Upload 2 | 27,593,574 | 15.93 | `kaggle-0926-121628-submit` |
-| Final | [FINAL] | [FINAL] | [FINAL run_id] |
+| Final (upload 3) | 31,669,732 | 18.28 | `v7b-0927-101300-submit` |
 
 Upload 2 per country (`kaggle-0926-111311-features`): US 15.85, India 16.08, France 15.64 pairs per S1.
+Final per country (`v7b-0927-090719-features`): US 18.21, India 18.47, France 17.87 pairs per S1.
 
 ---
 
@@ -161,9 +173,24 @@ they sit (the noise moves them to the front), and an order-invariant address par
 bis/ter suffix, street, unit, landmark, city, region via mined regions and region aliases such as
 "texas" -> tx, "krnatk" -> karnataka). Legal-form and region vocabularies are mined from Source-1 names and
 addresses of both splits (label-free token statistics); region aliases and the transliteration dictionary
-are mined from aligned training pairs. The only hand-written lists are small: five legal words from the
-problem statement (corporation, private, limited, incorporated, company) and the regular expressions for
-DBA markers, landmark and unit words, and bis/ter (section 7).
+are mined from aligned training pairs. The final run adds three label-free address rules (`config_v7.yaml`,
+`normalize.num_markers / open_region_alias / zero_strip`):
+
+- **Numbering markers**, mined per country from Source-2/3 addresses: part-initial tokens of at most four
+  letters that are followed by a number and street words in at least half of their uses ("no 5 rue x",
+  "ndeg 94 r y" from "N°"). France gets `no` and `ndeg`, the US and India none (their "no" is mostly a unit
+  or plot number). Without it the part is not read as the house part, so the street is lost or the part is
+  taken for the city.
+- **Region aliases for countries without training pairs**: the Source-1 table maps each city to its region;
+  a record part that is never a city, has no digits, sits last, co-occurs with cities of one region only and
+  rarely appears together with a region part is an alias of that region. It finds exactly the four French
+  departments of the test files (nord, pas de calais -> hauts de france; gironde -> nouvelle aquitaine;
+  loire atlantique -> pays de la loire) and nothing for the US.
+- **Zero-padded numbers** lose their leading zeros in the address text, as they already did in the house field.
+
+The only hand-written lists are small: five legal words from the problem statement (corporation, private,
+limited, incorporated, company) and the regular expressions for DBA markers, landmark and unit words, and
+bis/ter (section 7).
 
 ### 4.2 Features, never country, ids or row order
 
@@ -202,8 +229,16 @@ DBA markers, landmark and unit words, and bis/ter (section 7).
   XLM-R-base (one T4 each; lower held-out band log-loss wins); the winner trains folds 1 and 2. One epoch,
   learning rate 2e-5, batch 64. Every band pair gets an out-of-fold logit; test logits are the mean of the
   winner's fold-1 and fold-2 models. The logit enters stage B as a feature (missing outside the band).
-  Bake-off winner and held-out log-loss: [FINAL]. Any failure writes a marker and the pipeline runs without
-  it.
+  Any failure writes a marker and the pipeline runs without it. **Not in the final run.** The bake-off ran
+  twice on Kaggle: mDeBERTa-v3-base won fold 0 (held-out band log-loss 0.156 vs XLM-R-base 0.165, band
+  0.005-0.995), and a one-backbone run on the narrower band 0.02-0.98 reached 0.246-0.250 on its three folds
+  (`config_v7ce.yaml`). Both runs died after the stage-B base folds, when the cross-encoder variant started
+  (the first out of memory; the second as the account's weekly GPU quota ran out), so neither produced a file,
+  and `config_v7.yaml` keeps
+  the cross-encoder off. The code stays in `src/cross_encoder.py`.
+- **Memory:** stages A and B fill one float32 feature matrix column by column from Arrow and predict in
+  2M-row chunks (commit bd71889); the config_v6 GPU run had died of memory in dev stage B, and the config_v5
+  GPU run of memory in a later stage.
 - **Calibration:** isotonic regression on the OOF probabilities (US + India pooled); expected calibration
   error 0.00014-0.00017 after calibration (`kaggle-0926-102147-decide`).
 - **Assignment:** each S2/S3 record is kept only for the S1 with its highest calibrated probability.
@@ -212,8 +247,8 @@ DBA markers, landmark and unit words, and bis/ter (section 7).
 
 Stage B and the cross-encoder are candidates, not defaults. `decide` starts from stage A and adopts stage
 B, then stage B with the cross-encoder logit, only when the paired bootstrap interval of the per-entity
-F0.5 gain on the decoy dev excludes zero. Variant kept in the final run: [FINAL: stage A / stage B / stage B
-+ CE, with the gain and its interval].
+F0.5 gain on the decoy dev excludes zero. Variant kept in the final run: **stage B**, OOF 0.98060 against
+stage A 0.97901, gain +0.00159 [+0.00146, +0.00172] (`v7b-0927-074428-decide`).
 
 ### 4.5 Decision rule
 
@@ -229,7 +264,11 @@ interval excludes zero:
 | v2 stage B | GFM + count model (K = 4) | 0.97887 | -0.00003 [-0.00012, +0.00008] | `0926-103648-decide` |
 | v3 stage B | **GFM, independent** | 0.98049 | +0.00009 [+0.00003, +0.00015] | `kaggle-0926-102147-decide` |
 | v3 stage B | GFM + count model (K = 4) | 0.98039 | -0.00001 [-0.00011, +0.00009] | `kaggle-0926-102147-decide` |
-| final | [FINAL] | [FINAL] | [FINAL] | [FINAL run_id] |
+| final (v7) stage B | **two thresholds** (US 0.53 / 0.72, India 0.52 / 0.70, France pooled 0.53 / 0.71) | 0.98060 | - | `v7b-0927-074428-decide` |
+| final (v7) stage B | GFM, independent | 0.98065 | +0.00005 [-0.00001, +0.00010] | `v7b-0927-074428-decide` |
+| final (v7) stage B | GFM + count model (K = 4) | 0.98065 | +0.00005 [-0.00005, +0.00016] | `v7b-0927-074428-decide` |
+
+On the decoy dev no rule's gain over two thresholds excludes zero, so the final run keeps the simpler rule.
 
 GFM (Dembczynski et al., 2011, generalised to F-beta) returns the subset with the highest expected F0.5,
 including the empty set. The count model (4-class LightGBM on the entity's calibrated candidate
@@ -253,6 +292,25 @@ decimals only. The same probe puts the US +
 India contribution at 0.821 against 0.823 expected from dev (gap -0.0023), so upload 1 transferred from dev
 to test in the two labelled countries.
 
+**Label-free diagnosis (`runs/france_research.md`, scripts in `runs/france_research/`).** The model's own
+expected F0.5 (GFM under its calibrated probabilities) matches the realised dev F0.5 within 0.001 in both
+labelled countries, but on French candidates it expects 0.972 against the probe's ~0.93: France is a concept
+shift, not a calibration offset, which agrees with b_FR = 0. French Source-1 names are "<city> + generic
+word" (26% share their exact core name with another S1 of the same city, against 1% in the US), so only the
+address separates them. Because surface noise is applied independently of which entity a record belongs to,
+each noise marker can be tested as a natural experiment (does the marker change a record's chance of being
+linked?), and a test statistic whose train truth is known can be compared with it (true links per S1 do not
+depend on name-crowd size in train). Those checks located the leaks fixed in the final run (section 4.1 and
+C9), and they are the France part of the pre-upload checks (`src/france_checks.py`):
+
+| France, test | Upload 1 | Final (upload 3) |
+|---|---|---|
+| Records in no candidate list | 4.5% | 0.3% |
+| Links per S1 by name-crowd size (1 / 2-4 / 5-29 / 30+ S1s share the name) | 3.49 / 3.33 / 3.23 / 3.08 | 3.51 / 3.39 / 3.29 / 3.19 |
+| Links per S1 (train truth 3.46) | 3.36 | 3.40 |
+
+The same checks for India: records in no list 5.3% -> 0.6%, links per S1 3.18 -> 3.34.
+
 ---
 
 ## 5. Results & Error Analysis
@@ -265,13 +323,16 @@ to test in the two labelled countries.
 | v2: + transliteration, support features, stage A only | 0.97745 [0.97720, 0.97771] | 0.98009 | 0.97337 | 0.97253 | - | `0926-095450-decide` |
 | v2: stage B | 0.97898 [0.97876, 0.97923] | 0.98167 | 0.97484 | 0.97274 | - | `0926-103648-decide` |
 | v3: + C7, generator/consistency features, stage B | 0.98049 [0.98025, 0.98073] | 0.98308 | 0.97649 | 0.97424 | 0.938 (upload 2) | `kaggle-0926-102147-decide` |
-| final: config_v5 on decoy dev | [FINAL] | [FINAL] | [FINAL] | [FINAL] | [FINAL] | [FINAL run_id] |
+| v5 on decoy dev (Kaggle CPU; killed by the 12 h session limit in the test stages, no file) | 0.97981 | 0.98254 | 0.97559 | - | - | `cpuv4-0926-230232-decide` |
+| **final: v7 on decoy dev, stage B** | **0.98060 [0.98037, 0.98083]** | 0.98292 | 0.97700 | 0.97792 | [upload 3 public score] | `v7b-0927-074428-decide` |
 
 Oracles for v3 (`kaggle-0926-102147-decide`): perfect decisions on the retrieved candidates would score
-0.99402, and predicting every true singleton empty would score 0.98192.
+0.99402, and predicting every true singleton empty would score 0.98192. For the final run, perfect
+decisions on its candidates would score 0.99557 (`v7b-0927-074428-decide`).
 
-The OOF of the final run is measured on a harder dev (with decoys), so it is not comparable with the v1-v3
-rows; the comparison that matters there is the paired one inside `decide`.
+The OOF of the v5 and final rows is measured on a harder dev (with decoys), so it is not comparable with the
+v1-v3 rows. Between v5 and the final run the comparison is paired, entity by entity, on the 384k dev entities
+both dev universes share (`src/compare_runs.py`): gain +0.00073 [+0.00056, +0.00090].
 
 ### 5.2 Where v3 loses F0.5
 
@@ -289,6 +350,21 @@ contribution to 1 - macro F0.5 = 0.01951.
 Blocking misses by noise type: in the US, 48% are records with an empty address and 27% are records whose
 name was replaced (no shared token); in India, 26% name replaced, 21% empty address, 20% house-number
 conflicts. That table produced C7 top-25 and C8.
+
+Final run (`runs/kaggle_v7b/error_budget_kaggle-0927-1016.md`, decoy dev, 1 - macro F0.5 = 0.01940):
+
+| Cause | India | US | all | share |
+|---|---|---|---|---|
+| false merge on a singleton | 0.00064 | 0.00059 | 0.00123 | 6.3% |
+| extra wrong link | 0.00207 | 0.00197 | 0.00403 | 20.8% |
+| abstained on a real match | 0.00107 | 0.00132 | 0.00238 | 12.3% |
+| missed link inside the candidates | 0.00297 | 0.00440 | 0.00737 | 38.0% |
+| blocking miss | 0.00229 | 0.00209 | 0.00438 | 22.6% |
+
+Blocking now costs less than a quarter of the loss; the decisions on retrieved candidates cost the rest
+(oracle on the candidates 0.99557). On the iteration-2 dev artifacts (`runs/france_research/patterns.py`)
+the largest single class of missed true pairs is a record with exactly the S1's name and no house number
+(41% of US misses, 24% of India's, median p about 0.4); section 6 explains why dev over-penalises it.
 
 Common false positives (wrong merges): sibling businesses at one address whose names differ by one token
 ("Capital Fellowship IV" vs "EV", "Rocky Council III" vs "II"), one-letter name changes at an identical
@@ -336,7 +412,7 @@ the level of true train links by more than 50% relative (France is compared with
 |---|---|---|---|---|
 | Upload 1 | 0.0064 | 0.0026 | 0.0033 | pass |
 | Upload 2 | 0.0466 | 0.0041 | 0.0162 | fail |
-| Final | [FINAL] | [FINAL] | [FINAL] | [FINAL] |
+| Final (upload 3) | 0.0044 | 0.0028 | 0.0026 | pass |
 
 Had this check existed on 26 Sep, upload 2 would not have gone up. From then on no file that fails it is
 uploaded, whatever its OOF.
@@ -345,12 +421,26 @@ uploaded, whatever its OOF.
 
 ## 6. Conclusion
 
-[FINAL: 2-3 sentences after the last run: final OOF on decoy dev, public score, variant kept.]
+The final run (`config_v7.yaml`) scores 0.98060 [0.98037, 0.98083] OOF on the decoy dev with stage B and two
+thresholds, a paired gain of +0.00073 [+0.00056, +0.00090] over config_v5; it passes the acceptance check in
+all three countries and every France check against upload 1, and it scored [upload 3 public score] on the
+public leaderboard (upload 1: 0.960).
 
 What we would keep from this: the leaderboard caught a failure that 1,000 bootstrap resamples of dev could
 not, because dev and test differed in structure, not in noise level. Measuring the structure of the
 submission file against train truth (links per S1, the decoy shape) is cheap and needs no labels, and we
-should have done it before the first upload that changed the feature set.
+should have done it before the first upload that changed the feature set. The same idea, applied to France
+through natural experiments on surface-noise markers, found the parser and retrieval leaks that no labelled
+dev set could show.
+
+**Known limitation, found too late to run.** The dev queries are the S1s of 30% of the train cities, but
+the dev record pool holds every train record of the country: 20.3 records per query S1 (10.7 owned by other
+cities' S1s) against 5.5-5.8 per S1 on test. Records whose only evidence is the name therefore meet about 8
+times the look-alikes on dev that they meet on test (exact name and no house number: a true match 78% of the
+time on dev US, 92.7% in a test-sized pool), and the model learns to abstain on them. `dev.test_like_pool`
+(`config_v8.yaml`, commit 8e38dfc) keeps only the records a test pool would hold for the dev cities (5.81 US
+/ 5.72 India per query S1, every true pair kept); the run did not fit in the account's GPU quota before the
+deadline.
 
 ---
 
@@ -361,12 +451,12 @@ topic wins).
 
 | Rule | What we do | Organiser answer |
 |---|---|---|
-| No external data, APIs or lookups | No network call anywhere in the pipeline. The only download is the pretrained cross-encoder weights from Hugging Face, once, before the run | 25 Sep: "Prohibited: external databases, APIs, geocoding/entity lookup, internet-sourced augmentation, and packages bundling external geo/postal/business data" |
+| No external data, APIs or lookups | No network call anywhere in the pipeline. The only download is the pretrained cross-encoder weights from Hugging Face, once, before the run, and only when the cross-encoder is enabled (it is off in the final `config_v7.yaml`) | 25 Sep: "Prohibited: external databases, APIs, geocoding/entity lookup, internet-sourced augmentation, and packages bundling external geo/postal/business data" |
 | libpostal | Not used (`ALLOW_LIBPOSTAL: false`); our own address parser (section 4.1) | named as prohibited, 25 Sep 01:34 and 02:33 |
 | cleanco | Not used | prohibited (bundles a legal-term database), 25 Sep 23:14 |
 | Transliteration | anyascii 0.3.3 (ISC licence), a Unicode character table with no geo, postal or business data | anyascii named as allowed, 25 Sep 11:44 and 18:36 |
 | Hand-written lists | Five legal words from the problem statement, regular expressions for DBA, landmark and unit words, bis/ter. No city, postal or country tables. Every other vocabulary is mined from the provided records | "small hand-written normalization dictionaries" allowed (25 Sep); state abbreviations fine, city-level or postal tables not (25 Sep 14:43); hand-typed abbreviation and legal-form lists allowed (26 Sep 12:56, 17:03) |
-| Label-free statistics on test | TF-IDF vocabularies, document frequencies, legal-form and region vocabularies mined from Source-1 text of both splits | allowed, 25 Sep 02:03; 26 Sep 12:56, 18:43 |
+| Label-free statistics on test | TF-IDF vocabularies, document frequencies, legal-form and region vocabularies mined from Source-1 text of both splits; numbering markers and region aliases for countries without training pairs mined from Source-2/3 address text of both splits (token and co-occurrence counts, no predictions); the France checks compare counts in our own submission files | allowed, 25 Sep 02:03; 26 Sep 12:56, 18:43 |
 | Synthetic pairs | Synthetic decoy entities in the dev pool, built from provided records only (section 5.3) | "Self-training and generating synthetic pairs from the provided records are also fine", 25 Sep 02:03 |
 | Pretrained models | Only in the cross-encoder, fine-tuned on the provided training pairs only | MIT/Apache-2.0, <= 8B parameters per model, offline, fine-tuned only on provided data (25 Sep 00:04, 10:26) |
 | Country as an open set | Countries are read from the data; no feature encodes country; France runs through the same code | 25 Sep 01:42, 02:42 |
@@ -379,11 +469,12 @@ topic wins).
 | Model | Licence | Parameters | Use |
 |---|---|---|---|
 | LightGBM / XGBoost tree ensembles | MIT / Apache-2.0 (libraries) | trained here from scratch | pruner, stage A, stage B, count model |
-| microsoft/mdeberta-v3-base | MIT | 86M backbone + 190M embeddings | cross-encoder bake-off candidate |
-| FacebookAI/xlm-roberta-base | MIT | 270M | cross-encoder bake-off candidate |
-| intfloat/multilingual-e5-small | MIT | 118M | optional dense channel C4, measured separately, not in the final run [FINAL: confirm] |
+| microsoft/mdeberta-v3-base | MIT | 86M backbone + 190M embeddings | cross-encoder, trained in two runs that did not finish; not in the final run |
+| FacebookAI/xlm-roberta-base | MIT | 270M | cross-encoder bake-off candidate; not in the final run |
+| intfloat/multilingual-e5-small | MIT | 118M | optional dense channel C4, measured separately on a teammate's branch; not in the final run |
 
-No model outside MIT / Apache-2.0 and none above 8B parameters is used, in training or at inference.
+No model outside MIT / Apache-2.0 and none above 8B parameters is used, in training or at inference. The
+final submission is produced by the tree ensembles alone.
 
 ### 7.2 Leak check on the grouped folds
 
@@ -403,26 +494,35 @@ public probe (section 4.6) puts upload 1's US + India score within 0.0023 of dev
 ### A. Code Artefacts
 
 `code/business_entity_resolution/src/run_pipeline.py` is the single entry point:
-`python -m src.run_pipeline --config config_v5.yaml --stage all` regenerates both output files from
+`python -m src.run_pipeline --config config_v7.yaml --stage all` regenerates both output files from
 `dataset/` (prep, transliteration, dev stages, test stages, submit with the organisers' validator). The
-final run used `kaggle/runner/run_on_kaggle.py` on a Kaggle GPU session [FINAL: accelerator] (the XGBoost
-CUDA backend and the cross-encoder need a GPU; everything else runs on CPU). `python -m src.acceptance --config
-config_v5.yaml --file <matching_results.tsv>` is the pre-upload check. Stage-by-stage commands, runtimes
-and hardware are in the README. [FINAL: final run wall time and hardware.]
+final run used `kaggle/runner/run_on_kaggle.py` (with `ER_CONFIG=config_v7.yaml`) on a Kaggle session with
+2x Tesla T4, 4 CPU cores and 31 GB RAM, XGBoost CUDA backend; wall time 262 minutes from prep to the
+validated files (`v7b-0927-055319-prep` to `v7b-0927-101300-submit`). Without a GPU the same config runs with
+LightGBM on CPU (`model.backend: lightgbm`); `kaggle/runner_tpu/` does that on a Kaggle TPU VM with the
+pinned requirements in a virtual environment. Before an upload, `python -m src.stage_upload` runs the
+organisers' validator, `src.acceptance` (the decoy shape against train truth) and `src.france_checks`
+(label-free per-country checks against upload 1); `src.compare_runs` gives the paired dev gain between two
+runs. Stage-by-stage commands are in the README.
 
 ### B. Additional Results
 
 Blocking per channel, dev universe (PC of each channel alone; v1 `0926-011721-block`, v2
 `0926-074645-block`, v3 `kaggle-0926-091122-block`):
 
-| Channel | US v1 | India v1 | India v2 | US v3 | India v3 |
-|---|---|---|---|---|---|
-| C1 TF-IDF | 0.9455 | 0.9089 | 0.9169 | 0.9455 | 0.9169 |
-| C2 name crowd | 0.5835 | 0.4590 | 0.6256 | 0.5835 | 0.6256 |
-| C5a house + street key | 0.6929 | 0.2618 | 0.2732 | 0.6900 | 0.2732 |
-| C5b name + city key | 0.6184 | 0.2762 | 0.3369 | 0.6184 | 0.3369 |
-| C7 empty address (reverse) | - | - | - | 0.0419 | 0.0349 |
-| union | 0.9741 | 0.9429 | 0.9640 | 0.9873 | 0.9759 |
+| Channel | US v1 | India v1 | India v2 | US v3 | India v3 | US final | India final |
+|---|---|---|---|---|---|---|---|
+| C1 TF-IDF | 0.9455 | 0.9089 | 0.9169 | 0.9455 | 0.9169 | 0.9474 | 0.9189 |
+| C2 name crowd | 0.5835 | 0.4590 | 0.6256 | 0.5835 | 0.6256 | 0.5830 | 0.6273 |
+| C5a house + street key | 0.6929 | 0.2618 | 0.2732 | 0.6900 | 0.2732 | 0.6899 | 0.2715 |
+| C5b name + city key | 0.6184 | 0.2762 | 0.3369 | 0.6184 | 0.3369 | 0.6167 | 0.3350 |
+| C7 empty address (both directions in final) | - | - | - | 0.0419 | 0.0349 | 0.0445 | 0.0374 |
+| C8 address only | - | - | - | - | - | 0.7633 | 0.7563 |
+| C9 uncovered records | - | - | - | - | - | 0.0008 | 0.0036 |
+| union | 0.9741 | 0.9429 | 0.9640 | 0.9873 | 0.9759 | 0.9911 | 0.9832 |
+
+Final: `v7b-0927-061644-block`. C9's share of all true pairs is small on dev (its records are the ones no other
+channel reaches); on test it is where most French and Indian records in no list went (section 4.6).
 
 Pruner PC at top-N, dev universe (`0926-020122-features`, v1):
 

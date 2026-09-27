@@ -14,7 +14,7 @@ import time
 import zipfile
 
 IN, TMP, W = "/kaggle/input", "/kaggle/tmp", "/kaggle/working"
-CONFIG = os.environ.get("ER_CONFIG", "config_v6.yaml")
+CONFIG = os.environ.get("ER_CONFIG", "config_v7.yaml")
 STAGE = os.environ.get("ER_STAGE", "all")
 
 
