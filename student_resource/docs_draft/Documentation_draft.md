@@ -170,7 +170,23 @@ they sit (the noise moves them to the front), and an order-invariant address par
 bis/ter suffix, street, unit, landmark, city, region via mined regions and region aliases such as
 "texas" -> tx, "krnatk" -> karnataka). Legal-form and region vocabularies are mined from Source-1 names and
 addresses of both splits (label-free token statistics); region aliases and the transliteration dictionary
-are mined from aligned training pairs. The only hand-written lists are small: five legal words from the
+are mined from aligned training pairs.
+
+Three label-free additions came from the France audit (config_v7, commit 081b693), each behind its own
+flag:
+
+- Numbering markers (`num_markers`): address-part-initial tokens of at most 4 letters that are followed
+  by a number and street words in at least half of their uses are read as a house-number prefix. Mined per
+  country: France gets "no" and "ndeg" (N°), the US and India get none.
+- Open-set region aliases (`open_region_alias`): for a country with no training pairs, aliases are mined
+  from the Source-1 city -> region map instead. On France this finds exactly four departements written in
+  place of the region (nord, gironde, loire atlantique, pas de calais) and nothing for the US. Together
+  with the markers, the parsed French city is a real S1 city in 96.4% of records (89.4% before) and the
+  share of records with a house number but no street drops from 12.2% to 0.3% (200k-record sample).
+- Zero-padded house numbers (`zero_strip`): "0011 rue x" becomes "11 rue x" in the address text, which
+  the word-level address index could not match before (3-5% of records in every country).
+
+The only hand-written lists are small: five legal words from the
 problem statement (corporation, private, limited, incorporated, company) and the regular expressions for
 DBA markers, landmark and unit words, and bis/ter (section 7).
 
