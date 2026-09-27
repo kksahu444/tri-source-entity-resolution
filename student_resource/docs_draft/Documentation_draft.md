@@ -161,6 +161,23 @@ higher after the leaderboard, so a channel that adds candidates has to pay for t
 
 Upload 2 per country (`kaggle-0926-111311-features`): US 15.85, India 16.08, France 15.64 pairs per S1.
 
+### 3.5 Cost at test scale
+
+Blocking needs no GPU. The v3 test run (`kaggle-0926-103318-block`, Kaggle session CPU) took 40 minutes for
+all three countries, one country in memory at a time:
+
+| Country | S1 | S2 + S3 | all pairs | union pairs (per S1) | wall time | per S1 |
+|---|---|---|---|---|---|---|
+| US | 663,106 | 3,817,031 | 2.53e12 | 23.3M (35.1) | 15.2 min | 1.4 ms |
+| India | 809,986 | 4,717,565 | 3.82e12 | 31.2M (38.6) | 20.1 min | 1.5 ms |
+| France | 259,452 | 1,434,993 | 3.72e11 | 9.7M (37.5) | 3.1 min | 0.7 ms |
+| Total | 1,732,544 | 9,969,589 | 6.73e12 | 64.3M (37.1) | 40 min | |
+
+The union keeps 1 pair in 105,000 of the full cross product, and the pruner keeps 43% of the union:
+27.6M pairs in upload 2, reduction ratio 0.9999959 against all pairs. Work per S1 is bounded, because C1
+generates candidates only from posting lists capped at max(20,000, 0.5% of the index) and every channel
+keeps a fixed top-k, so the run grows with the number of S1s, not with S1s times records.
+
 ---
 
 ## 4. Matching Model
