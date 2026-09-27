@@ -6,6 +6,8 @@ structure with the structure of TRUE links in train (ground truth), per S1:
   links            all links
   near             links whose house number is 1-30 away from the S1's (same sorted core name and street)
   near_beside      near links of S1s that also have a link at their exact house number (the decoy shape)
+  near_broad       same city, same first core word, house 1-30 higher (covers word-changed decoys), reported
+  near_broad_beside   near_broad links of S1s that also have an exact-house link of that kind, reported
 A file fails when near_beside per S1 exceeds the train level by more than ``--tol`` (relative), in any
 country with a train reference; France is compared with the US/India average. Nothing is fitted: the
 file is accepted or rejected.
@@ -26,7 +28,7 @@ from . import io_utils
 from .normalize import norm_path
 from .utils import load_config
 
-COLS = ["entity_id", "country", "core", "street", "house"]
+COLS = ["entity_id", "country", "core", "street", "house", "city"]
 
 
 def _table(cfg, split, k):
@@ -42,12 +44,17 @@ def link_structure(pairs: pd.DataFrame, s1: pd.DataFrame, rec: pd.DataFrame) -> 
     ha = pd.to_numeric(a["house"], errors="coerce").to_numpy()
     hb = pd.to_numeric(b["house"], errors="coerce").to_numpy()
     d = np.abs(ha - hb)
+    off = hb - ha
+    city = (a["city"].fillna("").to_numpy() == b["city"].fillna("").to_numpy()) & (a["city"].fillna("").to_numpy() != "")
+    first = np.array([x.split()[:1] == y.split()[:1] and bool(x) for x, y in zip(a["core"].fillna(""), b["core"].fillna(""))])
     x = pd.DataFrame({"s1_id": pairs["s1_id"].to_numpy(), "country": a["country"].to_numpy(),
-                      "exact": same & (d == 0), "near": same & (d >= 1) & (d <= 30)})
+                      "exact": same & (d == 0), "near": same & (d >= 1) & (d <= 30),
+                      "exact_broad": city & first & (d == 0), "near_broad": city & first & (off >= 1) & (off <= 30)})
     has_exact = x.groupby("s1_id")["exact"].transform("any").to_numpy()
     x["near_beside"] = x["near"] & has_exact
+    x["near_broad_beside"] = x["near_broad"] & x.groupby("s1_id")["exact_broad"].transform("any").to_numpy()
     n_s1 = s1.groupby("country").size()
-    out = x.groupby("country")[["near", "near_beside"]].sum()
+    out = x.groupby("country")[["near", "near_beside", "near_broad", "near_broad_beside"]].sum()
     out["links"] = x.groupby("country").size()
     return out.div(n_s1.reindex(out.index), axis=0)
 

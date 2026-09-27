@@ -153,9 +153,30 @@ def _strip_ending(name: str, endings: set) -> str:
     return " ".join(toks).rstrip(",")
 
 
+ACCENT = str.maketrans("aeiouAEIOU", "\u00e1\u00e9\u00ed\u00f3\u00fa\u00c1\u00c9\u00cd\u00d3\u00da")
+
+
+def word_distribution(s1_names: list[str], endings: set, top: int = 400) -> tuple[list[str], np.ndarray]:
+    """Non-first, non-legal alphabetic words of the country's S1 names (len >= 3), most frequent ``top``."""
+    from ..normalize import fold
+    cnt, surface = Counter(), {}
+    for n in s1_names:
+        for t in n.split()[1:]:
+            w = TOKEN.findall(t)
+            if len(w) == 1 and w[0].isalpha() and len(w[0]) >= 3 and fold(w[0]) not in endings:
+                cnt[fold(w[0])] += 1
+                surface.setdefault(fold(w[0]), Counter())[w[0]] += 1
+    keep = cnt.most_common(top)
+    if not keep:
+        return [], np.zeros(0)
+    w = np.array([k for _, k in keep], float)
+    return [surface[t].most_common(1)[0][0] for t, _ in keep], w / w.sum()
+
+
 def synthetic_decoys(q_tbl: pa.Table, r_tbl: pa.Table, gt: pd.DataFrame, per_query: float, group_size: int,
                      seed: int, vocab: dict, country: str, translit_map: dict | None = None,
-                     offset_max: int = 21, neg_share: float = 0.03, translit: bool = True) -> pa.Table:
+                     offset_max: int = 21, neg_share: float = 0.03, translit: bool = True, mode: str = "suffix",
+                     id_prefix: str = "SYN") -> pa.Table:
     """Test-like dev pool: multi-record near-duplicate decoy entities (runs/decoy_shift.md).
 
     Test pools hold decoy entities next to many S1s: ~2 records named like the S1 with a different ending
@@ -169,6 +190,10 @@ def synthetic_decoys(q_tbl: pa.Table, r_tbl: pa.Table, gt: pd.DataFrame, per_que
     (their own noise) with the house number shifted by one offset for the whole entity (log-uniform
     1..offset_max, negative with probability neg_share). Rows go through the same normaliser as real records.
     ``per_query`` = extra decoy records per dev query. Ground truth is unchanged: decoys match nothing.
+    mode "word": the decoy entity keeps the S1's first word and replaces another word (or adds one) with a word
+    drawn from the country's S1 name words, once per entity ("EG Amis" -> "EG Institut", "Snack & Cie" ->
+    "Snack & Cie Holding"); each record then gets an ending with probability 0.7. France's test pools hold
+    0.30 such group records per S1 (US 0.033, India 0.080; runs/decoy_shift.md section 7).
     """
     from .. import normalize as nz
     rng = np.random.default_rng(seed)
@@ -189,9 +214,21 @@ def synthetic_decoys(q_tbl: pa.Table, r_tbl: pa.Table, gt: pd.DataFrame, per_que
     need = np.unique(rpos.reindex([c for cs in groups for c in cs]).to_numpy())
     r = r_tbl.select(["entity_id", "addr_a", "house", "src"]).take(pa.array(need)).to_pandas().set_index("entity_id")
     endings = set(vocab.get("legal", {}).get(country, []))       # legal forms only: business words stay
+    words, wprobs = word_distribution(q["name_a"].tolist(), endings | fsuf) if mode == "word" else ([], None)
+    if mode == "word" and not words:
+        return r_tbl.schema.empty_table()
     names, addrs, srcs = [], [], []
     for s1, cands in groups.items():
         base = _strip_ending(q.at[s1, "name_a"], endings)
+        if mode == "word":
+            toks = base.split()
+            w = words[rng.choice(len(words), p=wprobs)]
+            if len(toks) >= 2 and rng.random() < 0.6:
+                i = int(rng.integers(1, len(toks)))
+                toks[i] = w if w.lower() != toks[i].lower() else words[(words.index(w) + 1) % len(words)]
+            else:
+                toks.append(w)
+            base = " ".join(toks)
         off = max(1, int(round(np.exp(rng.uniform(0, np.log(offset_max)))))) * (-1 if rng.random() < neg_share else 1)
         for cid in list(rng.permutation(cands))[:group_size + int(rng.random() < 0.1)]:
             old = r.at[cid, "house"]
@@ -200,14 +237,17 @@ def synthetic_decoys(q_tbl: pa.Table, r_tbl: pa.Table, gt: pd.DataFrame, per_que
             if addr is None:
                 continue
             suf = forms[rng.choice(len(forms), p=probs)]
-            name = f"{suf} {base}" if rng.random() < 0.15 else f"{base} {suf}"
+            if mode == "word" and rng.random() >= 0.7:
+                name = base
+            else:
+                name = f"{suf} {base}" if rng.random() < 0.15 else f"{base} {suf}"
             if rng.random() < 0.25:
                 name = name.upper()
-            if rng.random() < 0.05:
-                vow = [i for i, ch in enumerate(name) if ch.lower() in "aeiou"]
+            if rng.random() < 0.05:                     # accent noise, as on real records ("Capital" -> "C\u00e1pital")
+                vow = [i for i, ch in enumerate(name) if ch in "aeiouAEIOU"]
                 if vow:
                     i = vow[rng.integers(len(vow))]
-                    name = name[:i] + "�" + name[i + 1:]
+                    name = name[:i] + name[i].translate(ACCENT) + name[i + 1:]
             names.append(name)
             addrs.append(addr)
             srcs.append(r.at[cid, "src"])
@@ -223,7 +263,7 @@ def synthetic_decoys(q_tbl: pa.Table, r_tbl: pa.Table, gt: pd.DataFrame, per_que
             core, leg = nz.split_legal(toks, lg)
             out.at[i, "name_b"], out.at[i, "core"] = " ".join(toks), " ".join(core)
             out.at[i, "legal"] = " ".join(sorted(set(leg)))
-    out.insert(0, "entity_id", [f"S{int(sv)}-SYN{i}" for i, sv in enumerate(srcs)])
+    out.insert(0, "entity_id", [f"S{int(sv)}-{id_prefix}{i}" for i, sv in enumerate(srcs)])
     out.insert(1, "country", country)
     out["name_a"] = [nz.view_a(x) for x in names]
     out["addr_a"] = [nz.view_a(x) for x in addrs]
@@ -434,6 +474,12 @@ def run(cfg: dict, split: str = "dev", frac: float | None = None) -> dict:
             syn = synthetic_decoys(q_tbl, tbl_r, gt, dc.get("per_query", {}).get(country, 0.0), dc.get("group_size", 2),
                                    cfg["seed"] + sum(map(ord, country)), vocab, country, tmap, dc.get("offset_max", 21),
                                    dc.get("neg_share", 0.03), cfg["flags"].get("TRANSLITERATE", True))
+            if dc.get("per_query_word", {}).get(country, 0.0) > 0:
+                syw = synthetic_decoys(q_tbl, tbl_r, gt, dc["per_query_word"][country], dc.get("group_size", 2),
+                                       cfg["seed"] + 7 + sum(map(ord, country)), vocab, country, tmap,
+                                       dc.get("offset_max", 21), dc.get("neg_share", 0.03),
+                                       cfg["flags"].get("TRANSLITERATE", True), mode="word", id_prefix="SYW")
+                syn = pa.concat_tables([syn, syw])
             tbl_r = pa.concat_tables([tbl_r, syn])
             n_syn[country] = syn.num_rows
             log.info("block dev %s: %s synthetic decoy records (%.3f per query)", country, f"{syn.num_rows:,}",
