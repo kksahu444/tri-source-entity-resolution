@@ -430,7 +430,7 @@ should have done it before the first upload that changed the feature set.
 
 ## 7. Compliance
 
-Organiser answers are taken from the challenge Q&A sheet (re-read 27 Sep 00:45 IST; the latest answer on a
+Organiser answers are taken from the challenge Q&A sheet (re-read 27 Sep 12:30 IST; the latest answer on a
 topic wins).
 
 | Rule | What we do | Organiser answer |
@@ -447,6 +447,7 @@ topic wins).
 | candidate_pairs.tsv | The pruned set fed to stage A, the first pair matcher; every matched id is in it | 25 Sep 03:14: "in a cascade, the input to the first scoring model"; 25 Sep 17:59 and 20:47: "the last candidate set fed to your matching model ... a pruned later stage is fine". We follow the later answers. The pruner scores candidates but is part of candidate generation |
 | Candidate-set size | Reported as total pairs (section 3.4) | "Total pairs. This is a separate judging criteria", 26 Sep 12:56 |
 | Which submission counts | The private score of our best public submission | 25 Sep 18:36, 26 Sep 12:56 and 17:03 |
+| Final ranking beyond the leaderboard | This document, the candidate-set size (section 3.4) and the code are what is judged besides the score | "decided based on complete evaluation of the approach, computationally efficient candidate generation process and code", 27 Sep 01:39 |
 
 ### 7.1 Models and licences
 
