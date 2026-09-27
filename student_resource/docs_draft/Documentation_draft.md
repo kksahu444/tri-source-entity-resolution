@@ -379,7 +379,11 @@ traced it (`runs/decoy_shift.md`):
 0.78, India 0.11 records per query; groups of 2, of 3 with probability 0.1): the S1's name without its
 legal form plus an ending drawn from the country's S1 endings, placed at one of the S1's true addresses with
 one house offset per entity (log-uniform 1-21, negative 3%), normalised like every real record. Synthetic
-pairs built from the provided records are explicitly allowed (section 7). (b) `decide` starts from stage A
+pairs built from the provided records are explicitly allowed (section 7). config_v6 adds a second decoy
+mode seen on test: word-changed entities that keep the S1's first word and replace or add one word drawn
+from the country's S1 name words (0.05 records per query in both countries; France test pools hold 0.30
+such group records per S1, US 0.033, India 0.080; commit 82bcaac). Decoy noise adds an accent where it
+used to insert U+FFFD, since the data has none. (b) `decide` starts from stage A
 and adopts stage B or the cross-encoder only on a paired-bootstrap gain on this dev. (c) Two features
 describe the decoy shape directly (signed house offset, count of exact-house candidates).
 
@@ -393,6 +397,18 @@ the level of true train links by more than 50% relative (France is compared with
 | Upload 1 | 0.0064 | 0.0026 | 0.0033 | pass |
 | Upload 2 | 0.0466 | 0.0041 | 0.0162 | fail |
 | Final | [FINAL] | [FINAL] | [FINAL] | [FINAL] |
+
+A broad variant is reported next to it (`near_broad_beside`: same city and first name word, house 1-30
+higher), which catches the word-changed decoys. It is logged, not a pass/fail gate (`runs/acceptance.jsonl`):
+
+| File | US (train truth 0.011) | India (0.0169) | France (train 0.014) |
+|---|---|---|---|
+| Upload 1 | 0.0209 | 0.0152 | 0.0270 |
+| Upload 2 | 0.2215 | 0.0310 | 0.1628 |
+| Final | [FINAL] | [FINAL] | [FINAL] |
+
+Upload 1 already sits near 2x train truth on this measure in the US and France, so the broad variant
+flags a residual that the strict check does not.
 
 Had this check existed on 26 Sep, upload 2 would not have gone up. From then on no file that fails it is
 uploaded, whatever its OOF.
