@@ -22,6 +22,13 @@ upload 1 (0.960). An upload replaces it only if it beats 0.960 public, and then 
 get, overfit or not. Decision 2 below is rewritten for this. Candidate-set size is judged separately as
 **total pairs** (26 Sep 12:56).
 
+**Q&A sheet re-read 27 Sep 12:30.** New since 00:45: (1) 27 Sep 01:39, "Final ranking (beyond public/private
+leaderboard) will be decided based on complete evaluation of the approach, computationally efficient candidate
+generation process and code", so the doc, total candidate pairs and code quality count after the score;
+(2) 27 Sep 07:51, an OOM question answered with "refer to the update in the Problem Statement section on the
+Unstop portal". **Nobody has read that update yet; check Unstop before the final zip.** (3) 26 Sep 19:14: the
+candidate_pairs file is uploaded in the final code submission, not on the leaderboard.
+
 ## Where submissions come from
 
 **`origin/adi`, not `origin/main`.** Aditya's pipeline under `student_resource/code/business_entity_resolution/`
