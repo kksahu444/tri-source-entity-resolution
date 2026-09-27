@@ -7,9 +7,16 @@ Rules:
 
 ## Blocking runs
 
-| date/time | commit | config change | pair recall | recall S2 / S3 | cand/S1 | upper-bound F | notes |
-|---|---|---|---|---|---|---|---|
-| | | default | | | | | |
+Dev-universe pair completeness from `student_resource/runs/run_log.csv` (Kaggle rows from
+`runs/kaggle_iter3/run_log.csv`, cited `kaggle-`).
+
+| date/time (IST) | commit | run_id | change | PC US | PC India | cand/S1 | ran by | notes |
+|---|---|---|---|---|---|---|---|---|
+| 26 Sep 01:05 | 2c2274b | 0926-005620-block | 1% benchmark, full sparse product | 0.98044 | 0.92805 | 35.41 | Aditya | block_bench slice, 567 s |
+| 26 Sep 01:46 | 2e372f1 | 0926-011721-block | v1: rare-feature C1 generation | 0.97407 | 0.94293 | 36.40 | Aditya | full dev, 1,749 s |
+| 26 Sep 08:13 | 5edc821 | 0926-074645-block | v2: + transliteration dictionary, rarest-token C5a key | 0.97404 | 0.96404 | 36.05 | Aditya | India +0.021 |
+| 26 Sep 09:33 | not logged (Kaggle) | kaggle-0926-091122-block | v3: + C7 reverse, k = 10 | 0.98727 | 0.97591 | 42.46 | Aditya | C7 alone 4.2% (US) / 3.5% (India) of true pairs |
+| 26 Sep | a4839a3 | `runs/c7_scale.md` | C7 recall vs S1 pool size, reverse k = 10 vs forward k = 5 | - | - | - | Ashutosh | study, not a pipeline run: at test-sized pools both directions add 12 pt (India) and 7 pt (US) on blank-address targets; led to `forward_k: 5` in config_v5 |
 
 ## Model / decision runs (OOF)
 
