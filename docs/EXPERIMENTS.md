@@ -28,8 +28,8 @@ Macro F0.5 over all dev-universe S1s with 1,000-resample entity bootstrap interv
 | 26 Sep 10:01 | 04669a9 | 0926-095450-decide | v2 stage A: + transliteration, support features | 0.97745 [0.97720, 0.97771] | 0.98009 | 0.97337 | GFM + count model | Aditya | India +0.014 |
 | 26 Sep 10:50 | 76ef313 | 0926-103648-decide | v2 stage B (context stacking) | 0.97898 [0.97876, 0.97923] | 0.98167 | 0.97484 | GFM, independent | Aditya | count model stops helping once stage B is in |
 | 26 Sep 10:33 | not logged (Kaggle) | kaggle-0926-102147-decide | v3: + C7, generator/consistency features, stage B, XGBoost CUDA | 0.98049 [0.98025, 0.98073] | 0.98308 | 0.97649 | GFM, independent | Aditya | became upload 2 (public 0.938, decoy over-linking) |
-| 27 Sep ~03:50 | - | Kaggle `amlc26-pipeline` v5 | config_v5: decoy dev, C7 forward, C8, cross-encoder | - | - | - | - | Aditya | died of memory after stage-B base folds, no file; cross-encoder bake-off fold 0: mDeBERTa-v3-base band log-loss 0.156, XLM-R-base 0.165; the stage took 3 h 10 min (`runs/france_research.md` section 6) |
-| 27 Sep 10:00 start | 081b693 | Kaggle `amlc26-pipeline-v7` | config_v7: v6 + France parse fixes, zero strip, C9; cross-encoder off | [pending] | | | | Aditya | 2x T4, XGBoost GPU |
+| 27 Sep ~03:50 | - | Kaggle `amlc26-pipeline` v5 and v6 | config_v5/v6: decoy dev, C7 forward, C8, cross-encoder | - | - | - | - | Aditya | both died of memory on the 31 GB sessions (stage B test held ~3 x 10 GB for India; fixed in bd71889), no file; cross-encoder bake-off fold 0: mDeBERTa-v3-base band log-loss 0.156, XLM-R-base 0.165; the stage took 3 h 10 min (`runs/france_research.md` section 6) |
+| 27 Sep 10:00 start | 081b693 | Kaggle `amlc26-pipeline-v7` | config_v7: v6 + France parse fixes, zero strip, C9; cross-encoder off | [pending] | | | | Aditya | 2x T4, XGBoost GPU; started before the memory fix bd71889 (11:21) |
 
 ## Leaderboard submissions (5 per day)
 
