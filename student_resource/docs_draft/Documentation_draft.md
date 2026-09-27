@@ -48,6 +48,7 @@ Audit outputs: `runs/d0_audit.txt`, `runs/france_audit.txt`; trigger table `runs
 | Duplicates inside S2/S3 | 54% (S2) and 59% (S3) of matched S1s have 2+ matches in one source | S2/S3 records of one business resemble each other: "candidate support" and sibling features |
 | Cross-country pairs; many-to-one | 0 and 0 of 7,638,365 true pairs | block per country; each record goes to at most one S1 (hard assignment) |
 | Pool size | (S2+S3)/S1 = 4.68 (train) vs 5.53-5.82 (test) | dev pool withholds 19% of dev S1s so their records act as extra distractors |
+| Dev pool density | through v7 every train record of the country sat in the dev pool: 20.3 records per US query S1 (10.7 owned by other cities' S1s, 5.3 by no S1) vs 5.5-5.8 per S1 on test (commit 8e38dfc) | test-like dev pool in config_v8 (section 5.4) |
 | Native scripts | 23.5% of India S2 names, 13% of India S3 names (Devanagari, Kannada, Telugu, Tamil, Bengali, Gujarati) | romanisation + a token dictionary mined from training pairs |
 | Name crowds | 28-43% of test S1 names repeat; France "same core name + same city" collisions are the largest | no channel may retrieve on the name alone; crowd-size features |
 | Noise in true pairs | first house number conflicts on 20.9%; last name token equal on only 40.5% | no hard vetoes; legal form is a soft feature |
