@@ -10,7 +10,9 @@ file it comes from). Iteration-3 runs were made on a Kaggle T4 session; their ro
 F0.5 over all dev-universe Source-1 entities, exactly as the leaderboard computes it, with 1,000-resample
 bootstrap intervals over entities.
 
-Gaps marked **[FINAL: ...]** are filled from the last run (`config_v5.yaml`) before the zip is built.
+Gaps marked **[FINAL: ...]** are filled from the last run before the zip is built. That run is
+`config_v7.yaml` (Kaggle, started 27 Sep 10:00 IST); `config_v6.yaml` is the runner default and the
+fallback if v7 does not finish. [FINAL: which of the two produced the uploaded file.]
 
 ---
 
