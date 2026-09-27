@@ -3,7 +3,7 @@
 Handoff for teammates and for any fresh Claude/Codex session after a context reset. Read this
 first, then `CLAUDE.md`. Update the "State" and "Open items" sections before you stop working.
 
-Last updated: 27 Sep 2026, 12:25 IST, by Ashutosh.
+Last updated: 27 Sep 2026, 14:40 IST, by Ashutosh.
 
 Git rule: work on your own branch, commit small and often, push the branch. Before anything goes to
 `main`, merge `origin/main` into the branch and run both test suites (repo root and
@@ -26,7 +26,10 @@ get, overfit or not. Decision 2 below is rewritten for this. Candidate-set size 
 leaderboard) will be decided based on complete evaluation of the approach, computationally efficient candidate
 generation process and code", so the doc, total candidate pairs and code quality count after the score;
 (2) 27 Sep 07:51, an OOM question answered with "refer to the update in the Problem Statement section on the
-Unstop portal". **Nobody has read that update yet; check Unstop before the final zip.** (3) 26 Sep 19:14: the
+Unstop portal". That update came by mail (updates@unstop.events, 27 Sep 12:41): candidate_pairs.tsv is part
+of the final submission, we review it and the code that produces it, and "the approach that generates a smaller
+candidate set per Source 1 entity will be ranked higher in the final evaluation beyond the public/private
+leaderboard". Nothing new otherwise (5 uploads per day, window closes 27 Sep 23:59). (3) 26 Sep 19:14: the
 candidate_pairs file is uploaded in the final code submission, not on the leaderboard.
 
 ## Where submissions come from
