@@ -129,10 +129,12 @@ Pair completeness (PC, share of true pairs retrieved) on the dev universe:
 | v1 (rare-feature C1) | 0.9741 | 0.9429 | 36.4 | `0926-011721-block` |
 | v2 (+ transliteration dictionary, rarest-token key) | 0.9740 | 0.9640 | 36.1 | `0926-074645-block` |
 | v3 (+ C7 reverse, k = 10) | 0.9873 | 0.9759 | 42.5 | `kaggle-0926-091122-block` |
-| v5 (C7 k = 25 + forward, C8, decoy dev) | [FINAL] | [FINAL] | [FINAL] | [FINAL run_id] |
+| final (C7 k = 25 + forward, C8, C9, decoy dev) | [FINAL] | [FINAL] | [FINAL] | [FINAL run_id] |
 
 C7 alone retrieves 4.2% (US) and 3.5% (India) of all true pairs in v3 (`kaggle-0926-091122-block`); its
-records are the ones no other channel reaches. Reduction ratio: 0.9999933 (US), 0.9999894 (India) in v3.
+records are the ones no other channel reaches. C9 can only be judged on test, without labels: 4.1% of French records
+were in no candidate list in upload 1 (US 2.6%, `runs/france_research.md`), and the final file should move
+France towards the US level (`src.france_checks`). [FINAL: France uncovered-record share in the final file.] Reduction ratio: 0.9999933 (US), 0.9999894 (India) in v3.
 
 ### 3.4 Pruner and the candidate set
 
