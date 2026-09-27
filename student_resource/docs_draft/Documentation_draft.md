@@ -148,6 +148,17 @@ the competing entities. N = 8 in v1-v2 (`0926-020122-features`: PC after pruning
 about 20 candidates per S1 on dev) and N = 9 in v3 (`kaggle-0926-093309-features`: 0.9857 US, 0.9742
 India, 23.2 per S1 on dev).
 
+PC of the pruner's top-N on the v3 dev union (`kaggle-0926-093309-features`):
+
+| N per S1 | 5 | 10 | 15 | 20 | 30 | 60 | union |
+|---|---|---|---|---|---|---|---|
+| US | 0.9267 | 0.9848 | 0.9864 | 0.9869 | 0.9871 | 0.9873 | 0.9873 |
+| India | 0.9089 | 0.9724 | 0.9750 | 0.9755 | 0.9758 | 0.9759 | 0.9759 |
+
+The curve bends between 5 and 10: past N = 10 each extra slot buys 0.0005 of PC or less, below 10 each
+lost slot costs about 0.012. A true S1 has 3.46 matches on average, so N has to cover the largest lists,
+not the mean.
+
 `candidate_pairs.tsv` is exactly this pruned set, the input of the stage-A matcher; every match is a subset
 of it (the writer asserts it, and the organisers' validator passes). The organisers measure candidate-set
 size as total pairs, and their 27 Sep update on Unstop ranks a smaller candidate set per Source-1 entity
