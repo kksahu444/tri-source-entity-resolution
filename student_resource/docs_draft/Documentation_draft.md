@@ -29,7 +29,9 @@ training. Our first two leaderboard uploads taught us that dev OOF can be blind 
 better-scoring model on dev (0.98049 vs 0.97143) scored lower on the public board (0.938 vs 0.960) because
 test holds groups of near-duplicate decoy businesses that dev lacked. The final run trains and selects on
 a dev set with synthetic decoys at the test rate, and every file must pass a structural acceptance check
-before upload (section 5.3).
+before upload (section 5.3). France, about 15% of test, has no labels; a diagnostic upload puts it near F0.5 0.928,
+and a label-free audit of the test files traced the gap to generic names on crowded streets and to address
+forms the parser missed, which the final configuration fixes without any French word list (section 4.6).
 
 ---
 
