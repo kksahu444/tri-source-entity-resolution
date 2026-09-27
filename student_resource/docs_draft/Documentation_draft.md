@@ -284,6 +284,31 @@ decimals only. The same probe puts the US +
 India contribution at 0.821 against 0.823 expected from dev (gap -0.0023), so upload 1 transferred from dev
 to test in the two labelled countries.
 
+Aditya then looked for the France gap without labels (`runs/france_research.md`, scripts in
+`runs/france_research/`):
+
+- The model is confidently wrong, not miscalibrated. Its own expected F0.5 (GFM under its calibrated
+  probabilities) matches realised dev F0.5 (US 0.9878 vs 0.9871, India 0.9846 vs 0.9843), but on test
+  France it expects 0.972 on the candidates while the probe says about 0.928. The uncertain mass per S1
+  (sum of min(p, 1 - p)) is 0.24 in France against 0.07-0.09 on dev. This agrees with b_FR = 0: the same
+  feature pattern means something else in France.
+- France is built on generic names ("<city> + generic word") on crowded streets, so only the address
+  separates businesses (section 2.1). Checked by hand: pairs with the same name, house and city but a
+  different street (26,291 pairs, model p about 0.03) are coincidences on other streets, and rejecting
+  them is right.
+- The measurable leaks are the N° prefixes, departements in place of regions, zero-padded numbers,
+  records in no candidate list, and recall falling with name-crowd size (3.49 links per S1 for unique
+  names down to 3.07 for crowds of 30+, while dev truth is flat at 3.44-3.47). Each is worth an estimated
+  +0.002 to +0.009 of France F0.5; config_v7 addresses the first four (sections 3.1 and 4.1). A realistic
+  France target is 0.94-0.95, not 0.99, because part of the gap is records whose only evidence is a
+  generic name in a city with hundreds of same-name S1s.
+- Ruled out: same-house decoy groups (0.0066 per S1, 99% true on dev), hidden singletons, exact S1 twins
+  (0.05%), row-order or id leakage in train (id correlation 0.0005).
+
+Since France has no labels, a France change is judged on the file, against upload 1, by
+`src.france_checks`: the share of French records in no candidate list, links per S1 by name-crowd size,
+and the acceptance check below. [FINAL: those three numbers for the final file.]
+
 ---
 
 ## 5. Results & Error Analysis
