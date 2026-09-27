@@ -1,6 +1,9 @@
 """Build <team>_submission.zip in the layout the problem statement requires (spec section 11).
 
 python -m src.package --team <TEAM> [--doc path/to/filled_Documentation_template.md]
+
+The document defaults to docs_draft/Documentation_draft.md (the filled one), not the blank organisers'
+template. A document that still holds "[FINAL" gaps is refused.
 """
 from __future__ import annotations
 
@@ -16,12 +19,16 @@ CODE_ITEMS = ["src", "tests", "kaggle", "README.md", "requirements.txt", "requir
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--team", required=True)
-    ap.add_argument("--doc", default=None, help="filled Documentation_template.md")
+    ap.add_argument("--doc", default=None, help="filled document (default docs_draft/Documentation_draft.md)")
     ap.add_argument("--out", default=None)
     args = ap.parse_args(argv)
-    cfg = load_config()
     sr = os.path.dirname(os.path.dirname(ROOT))                       # student_resource/
-    doc = args.doc or os.path.join(sr, "Documentation_template.md")
+    doc = args.doc or os.path.join(sr, "docs_draft", "Documentation_draft.md")
+    with open(doc, encoding="utf-8") as f:
+        gaps = f.read().count("[FINAL")
+    if gaps:
+        ap.error(f"{doc} still has {gaps} [FINAL] gaps; fill them from the last run first")
+    cfg = load_config()
     out = args.out or os.path.join(sr, f"{args.team}_submission.zip")
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         for name in ("matching_results.tsv", "candidate_pairs.tsv"):
