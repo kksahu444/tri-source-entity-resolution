@@ -38,7 +38,11 @@ candidate_pairs file is uploaded in the final code submission, not on the leader
 lives on his branch. On 27 Sep 01:30 I merged origin/adi (through c253f72) into main (cac50f2): main's
 `student_resource/code` is now his tree plus my additive files (my superseded CE lane export renamed to
 `src/ce_lane_export.py`, since his T6 export owns `src/ce_export.py`). Anything he pushes after c253f72 is
-on adi only until the next merge; he can `git merge origin/main` without conflicts. He runs it on a Kaggle T4 session (`kaggle/runner/run_on_kaggle.py`, XGBoost CUDA backend).
+on adi only until the next merge; he can `git merge origin/main` without conflicts (re-checked with
+`git merge-tree` at 14:30 on 27 Sep). **At 14:30 adi lacks 22 commits of main**, among them the latest
+Documentation_draft.md and the `src.package` guard against `[FINAL` gaps (78c9a18). A zip built on adi without
+that merge ships the older doc and no guard, so merge origin/main (or methodology-0927) into adi before
+`python -m src.package`. He runs it on a Kaggle T4 session (`kaggle/runner/run_on_kaggle.py`, XGBoost CUDA backend).
 Read his files there: `git show origin/adi:<path>`. His `student_resource/PROGRESS_REPORT.md` (stale at
 09:55 26 Sep), `runs/decoy_shift.md` and `runs/kaggle_iter3/` are the current record.
 
