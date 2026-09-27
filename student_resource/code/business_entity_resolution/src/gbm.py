@@ -68,7 +68,13 @@ def train_binary(cfg: dict, X, y, rounds: int, X_val=None, y_val=None, early: in
     return Model(b, "lgb", 0)
 
 
-def predict(m, X: np.ndarray) -> np.ndarray:
-    if isinstance(m, Model):
-        return m.predict(X)
-    return m.predict(X, num_iteration=getattr(m, "best_iteration", None) or None)   # bare LightGBM booster
+def predict(m, X: np.ndarray, chunk: int = 2_000_000) -> np.ndarray:
+    """Predict in row chunks: one pass over ~13M test pairs at once needs a second full copy of X on the
+    GPU/host (the iteration-5 GPU runs died of memory)."""
+    def one(x):
+        if isinstance(m, Model):
+            return m.predict(x)
+        return m.predict(x, num_iteration=getattr(m, "best_iteration", None) or None)   # bare LightGBM booster
+    if len(X) <= chunk:
+        return one(X)
+    return np.concatenate([one(X[s:s + chunk]) for s in range(0, len(X), chunk)])

@@ -23,6 +23,7 @@ import pickle
 
 import numpy as np
 import pandas as pd
+import pyarrow.parquet as pq
 from numba import njit
 from rapidfuzz import fuzz
 
@@ -31,7 +32,7 @@ from .blocking.union import block_dir
 from .cross_encoder import ce_logits, stack_variant
 from .featurize import countries, feat_dir
 from .features import _col, _group_stats, _sim
-from .stack import MAX_ROUNDS, EARLY, META, PARAMS, pred_dir, predict_test
+from .stack import MAX_ROUNDS, EARLY, META, PARAMS, feature_matrix, pred_dir, predict_test
 from .utils import Timer, get_logger
 
 log = get_logger()
@@ -151,10 +152,15 @@ def record_keys(r: pd.DataFrame) -> dict:
     return keys
 
 
+BASE = ["qi", "ri", "y", "fold", "c1_score", "n_tok_ov", "a_tset"]
+
+
 def _load(cfg, split, c):
-    """Returns (features, stage-A probabilities, record keys, consistency pairs or None)."""
+    """Returns (the few feature columns context/consistency need, stage-A probabilities, record keys,
+    consistency pairs or None). The full feature matrix is built later, column by column (feature_matrix)."""
     fd, pdir = feat_dir(cfg), pred_dir(cfg)
-    df = pd.read_parquet(os.path.join(fd, f"{split}_{c}.parquet"))
+    path = os.path.join(fd, f"{split}_{c}.parquet")
+    df = pd.read_parquet(path, columns=[k for k in BASE if k in pq.read_schema(path).names])
     pa = pd.read_parquet(os.path.join(pdir, f"{split}_{c}_stageA.parquet"))["p"].to_numpy()
     r = pd.read_parquet(os.path.join(block_dir(cfg), f"{split}_{c}_r.parquet"), columns=["core", "addr_core", "house"],
                         dtype_backend="pyarrow")
@@ -200,18 +206,18 @@ def run(cfg: dict, split: str = "dev") -> dict:
     cs = countries(cfg, split)
     info = {}
     if split == "dev":
-        Xs, ys, folds, qis, ris, cc = [], [], [], [], [], []
+        ctxs, ys, folds, qis, ris, cc = [], [], [], [], [], []
         use_ce = all(ce_logits(cfg, "dev", c) is not None for c in cs)
+        paths = [os.path.join(fd, f"dev_{c}.parquet") for c in cs]
+        fcols = [k for k in pq.read_schema(paths[0]).names if k not in META]
         for i, c in enumerate(cs):
             df, pa, keys, cons = _load(cfg, split, c)
             ctx = context_features(df["qi"].to_numpy(), df["ri"].to_numpy(), pa, keys, cons, df)
             info[f"pa_quantiles_dev_{c}"] = _quantiles(pa)
-            fcols = [k for k in df.columns if k not in META]
-            cols = fcols + list(ctx.columns)
-            parts = [df[fcols].to_numpy(np.float32), ctx.to_numpy(np.float32)]
             if use_ce:
-                parts.append(ce_feature(cfg, "dev", c, df["qi"].to_numpy(), df["ri"].to_numpy())[:, None])
-            Xs.append(np.hstack(parts))
+                ctx[CE_COL] = ce_feature(cfg, "dev", c, df["qi"].to_numpy(), df["ri"].to_numpy())
+            ctxs.append(ctx.to_numpy(np.float32))
+            ctx_cols = list(ctx.columns)
             ys.append(df["y"].to_numpy())
             folds.append(df["fold"].to_numpy())
             qis.append(df["qi"].to_numpy())
@@ -219,8 +225,12 @@ def run(cfg: dict, split: str = "dev") -> dict:
             cc.append(np.full(len(df), i))
             del df, ctx, cons
             log.info("stage B inputs %s (%.0fs)", c, t())
-        X, y, fold = np.vstack(Xs), np.concatenate(ys), np.concatenate(folds)
-        del Xs
+        # one float32 matrix: features column by column from Arrow, then the context (and CE) columns
+        X = feature_matrix(paths, fcols, extra=len(ctx_cols))
+        X[:, len(fcols):] = np.vstack(ctxs)
+        del ctxs
+        cols = fcols + [k for k in ctx_cols if k != CE_COL]
+        y, fold = np.concatenate(ys), np.concatenate(folds)
         qi_all, ri_all, c_all = np.concatenate(qis), np.concatenate(ris), np.concatenate(cc)
         df = pd.DataFrame({"qi": qi_all, "ri": ri_all, "y": y, "_c": np.array(cs)[c_all]})
         rng = np.random.default_rng(cfg["seed"] + 1)
@@ -268,10 +278,13 @@ def run(cfg: dict, split: str = "dev") -> dict:
             qi, ri = df["qi"].to_numpy(), df["ri"].to_numpy()
             folds_path = os.path.join(pdir, f"{split}_{c}_stageA_folds.parquet")
             info[f"pa_quantiles_test_avg_{c}"] = _quantiles(pa)
-            fcols = [k for k in st["cols"] if k in df.columns]
-            X = np.empty((len(df), len(st["cols"])), np.float32)
+            path = os.path.join(fd, f"{split}_{c}.parquet")
+            have = set(pq.read_schema(path).names)
+            fcols = [k for k in st["cols"] if k in have]
+            # features in st["cols"] order come first in stage B's column list (fcols + context [+ CE])
+            assert fcols == st["cols"][:len(fcols)], "stage-B column order changed"
+            X = feature_matrix([path], fcols, extra=len(st["cols"]) - len(fcols))
             pos = {k: i for i, k in enumerate(st["cols"])}
-            X[:, [pos[k] for k in fcols]] = df[fcols].to_numpy(np.float32)
             if CE_COL in pos:
                 X[:, pos[CE_COL]] = ce_feature(cfg, split, c, qi, ri)
                 info[f"ce_band_share_test_{c}"] = round(float(np.isfinite(X[:, pos[CE_COL]]).mean()), 4)

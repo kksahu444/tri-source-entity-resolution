@@ -7,6 +7,7 @@ import pickle
 
 import numpy as np
 import pandas as pd
+import pyarrow.parquet as pq
 
 from . import gbm
 from .featurize import countries, feat_dir
@@ -39,6 +40,23 @@ def predict_test(st: dict, X: np.ndarray) -> np.ndarray:
     return np.mean([gbm.predict(m, X) for m in st["models"]], axis=0)
 
 
+def feature_matrix(paths: list[str], cols: list[str], extra: int = 0) -> np.ndarray:
+    """float32 matrix of ``cols`` stacked over the parquet files, filled one column at a time from Arrow
+    (no full pandas copy: that doubled the peak and the iteration-5 GPU runs died of memory). ``extra``
+    trailing columns are left for the caller."""
+    n = [pq.ParquetFile(p).metadata.num_rows for p in paths]
+    X = np.empty((sum(n), len(cols) + extra), np.float32)
+    row = 0
+    for p, k in zip(paths, n):
+        for j in range(0, len(cols), 32):
+            t = pq.read_table(p, columns=cols[j:j + 32])
+            for i, col in enumerate(cols[j:j + 32]):
+                X[row:row + k, j + i] = t.column(col).to_numpy()
+            del t
+        row += k
+    return X
+
+
 def pred_dir(cfg):
     d = os.path.join(cfg["paths"]["artifacts"], "pred")
     os.makedirs(d, exist_ok=True)
@@ -51,11 +69,10 @@ def run(cfg: dict, split: str = "dev") -> dict:
     model_path = os.path.join(fd, "stageA.pkl")
     cs = countries(cfg, split)
     if split == "dev":
-        frames = [pd.read_parquet(os.path.join(fd, f"dev_{c}.parquet")).assign(_c=c) for c in cs]
-        df = pd.concat(frames, ignore_index=True)
-        del frames
-        cols = [c for c in df.columns if c not in META and c != "_c"]
-        X = df[cols].to_numpy(np.float32)
+        paths = [os.path.join(fd, f"dev_{c}.parquet") for c in cs]
+        cols = [k for k in pq.read_schema(paths[0]).names if k not in META]
+        df = pd.concat([pd.read_parquet(p, columns=META).assign(_c=c) for p, c in zip(paths, cs)], ignore_index=True)
+        X = feature_matrix(paths, cols)
         y = df["y"].to_numpy()
         fold = df["fold"].to_numpy()
         # early-stopping holdout: S1s drawn inside the training folds (never the scored fold)
@@ -91,10 +108,11 @@ def run(cfg: dict, split: str = "dev") -> dict:
         st = pickle.load(open(model_path, "rb"))
         info = {}
         for c in cs:
-            df = pd.read_parquet(os.path.join(fd, f"test_{c}.parquet"))
-            qi_t, ri_t = df["qi"].to_numpy(), df["ri"].to_numpy()
-            X = df[st["cols"]].to_numpy(np.float32)
-            del df
+            path = os.path.join(fd, f"test_{c}.parquet")
+            ids = pd.read_parquet(path, columns=["qi", "ri"])
+            qi_t, ri_t = ids["qi"].to_numpy(), ids["ri"].to_numpy()
+            del ids
+            X = feature_matrix([path], st["cols"])
             if st.get("full_model") is not None:
                 p, per_fold = predict_test(st, X), None
             else:
