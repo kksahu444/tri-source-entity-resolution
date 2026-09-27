@@ -3,6 +3,7 @@
 1. download the kernel output (output/, runs/) into artifacts/kaggle_out/<name>/
 2. official validator on matching_results.tsv + candidate_pairs.tsv (must exit 0)
 3. acceptance check against train truth (src.acceptance; must pass, runs/decoy_shift.md)
+   + src.france_checks against upload 1 (reported)
 4. copy both files to submissions/<name>/, SHA-256 of each, and append a manifest row with the run's
    dev OOF (from its decide dev run-log row), the chosen variant and the acceptance numbers
 
@@ -56,6 +57,11 @@ def main(argv=None) -> int:
     print(val.stdout[-3000:], val.stderr[-2000:])
     acc = check(cfg, match)
     print(json.dumps(acc, indent=1))
+    # label-free per-country checks against upload 1 (runs/france_research.md); reported, not a gate
+    fr = subprocess.run([sys.executable, "-m", "src.france_checks", "--config", args.config, "--matching", match,
+                         "--candidates", cand], capture_output=True, text=True,
+                        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    print(fr.stdout[-4000:], fr.stderr[-1500:])
     if val.returncode != 0 or not acc["pass"]:
         print(f"NOT STAGED: validator exit {val.returncode}, acceptance pass {acc['pass']}")
         return 1
