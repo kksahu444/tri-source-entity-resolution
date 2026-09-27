@@ -51,6 +51,10 @@ Audit outputs: `runs/d0_audit.txt`, `runs/france_audit.txt`; trigger table `runs
 | Empty record addresses | 48% of US and 21% of India blocking misses after iteration 3 are records with no address (`runs/kaggle_iter3/error_budget_kaggle-0926-1219.md`) | a name channel for empty-address records in both directions (C7, section 3.2) |
 | France-only noise (unlabelled test audit) | "R." for Rue in 12% of French S2/S3 addresses, "St-" for Saint-, Av/Bd/Imp/Rte | a language-agnostic subsequence-abbreviation matcher instead of a French word list |
 | Near-duplicate decoys (test only) | same name and street, house number 1-30 apart, in groups of 2+ records: 0.84 group records per US S1 on test vs 0.06 on dev (`runs/decoy_shift.md`) | dev with synthetic decoys; acceptance check before upload (section 5.3) |
+| Word-changed decoys (test only) | first word of the S1 name kept, one word replaced or added: 0.30 group records per S1 in France test pools, US 0.033, India 0.080 (commit 82bcaac) | a second decoy mode in the dev pool (config_v6) |
+| France generic names | 26.3% of French S1s share their exact core name with another S1 of the same city (US 1.1%, India 16.9%); 40.8 S1s per street; 420 S1s called "lille club" in Lille (`runs/france_research.md`) | the address has to carry the decision; recall per S1 falls with crowd size (3.49 -> 3.07 links) |
+| France "N°" house prefixes | 11.5% of French S2/S3 addresses start with "no"/"ndeg"; 12.2% of French records had a house number but no parsed street (US 1.0%) | numbering markers mined per country (section 4.1) |
+| Records in no candidate list | 4.1% of French S2/S3 records, 2.6% US, measured on upload 1 without labels | C9 reverse channel for uncovered records (section 3.1) |
 
 ### 2.2 The metric has two regimes
 
