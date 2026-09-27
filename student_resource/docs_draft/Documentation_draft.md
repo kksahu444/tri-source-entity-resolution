@@ -135,8 +135,16 @@ Pair completeness (PC, share of true pairs retrieved) on the dev universe:
 | v3 (+ C7 reverse, k = 10) | 0.9873 | 0.9759 | 42.5 | `kaggle-0926-091122-block` |
 | final (C7 k = 25 + forward, C8, C9, decoy dev) | [FINAL] | [FINAL] | [FINAL] | [FINAL run_id] |
 
-C7 alone retrieves 4.2% (US) and 3.5% (India) of all true pairs in v3 (`kaggle-0926-091122-block`); its
-records are the ones no other channel reaches. C9 can only be judged on test, without labels: 4.1% of French records
+Each channel on its own in v3 (`kaggle-0926-091122-block`), against the union:
+
+| | C1 TF-IDF | C2 name crowd | C5a street key | C5b name + city key | C7 empty address | union |
+|---|---|---|---|---|---|---|
+| US PC | 0.9455 | 0.5835 | 0.6900 | 0.6184 | 0.0419 | 0.9873 |
+| India PC | 0.9169 | 0.6256 | 0.2732 | 0.3369 | 0.0349 | 0.9759 |
+
+C1 carries most of the recall; the other four channels close 77% (US) and 71% (India) of the gap between
+C1 and full recall. C7 alone retrieves 4.2% (US) and 3.5% (India) of all true pairs; its records are the ones no other
+channel reaches. C9 can only be judged on test, without labels: 4.1% of French records
 were in no candidate list in upload 1 (US 2.6%, `runs/france_research.md`), and the final file should move
 France towards the US level (`src.france_checks`). [FINAL: France uncovered-record share in the final file.] Reduction ratio: 0.9999933 (US), 0.9999894 (India) in v3.
 
