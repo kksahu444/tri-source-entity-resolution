@@ -502,11 +502,13 @@ public probe (section 4.6) puts upload 1's US + India score within 0.0023 of dev
 ### A. Code Artefacts
 
 `code/business_entity_resolution/src/run_pipeline.py` is the single entry point:
-`python -m src.run_pipeline --config config_v7.yaml --stage all` regenerates both output files from
+`python -m src.run_pipeline --config <config> --stage all` (`config_v7.yaml`, `config_v7ce.yaml` or
+`config_v8.yaml`, [FINAL: the one used]) regenerates both output files from
 `dataset/` (prep, transliteration, dev stages, test stages, submit with the organisers' validator). The
 final run used `kaggle/runner/run_on_kaggle.py` on a Kaggle GPU session [FINAL: accelerator] (the XGBoost
 CUDA backend needs a GPU; with the cross-encoder off, everything else runs on CPU and nothing is
-downloaded). Stage-by-stage commands, runtimes and hardware are in the README. [FINAL: final run wall time
+downloaded). The runner checkpoints the final test probabilities per country (`pred/test_*.parquet`), so the
+decision layer can be re-run offline without repeating the GPU stages. Stage-by-stage commands, runtimes and hardware are in the README. [FINAL: final run wall time
 and hardware.]
 
 Checks and bookkeeping around an upload, all in `src/`:
