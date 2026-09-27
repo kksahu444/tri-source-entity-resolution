@@ -23,7 +23,9 @@ A four-stage pipeline: a union of complementary retrieval channels (character/wo
 hash keys, a two-way name channel for records with no address, an address-only channel), a learned pruner,
 gradient-boosted pair matchers (stage A on 100+ similarity features, stage B adding context from stage A's
 own out-of-fold probabilities, optionally a fine-tuned multilingual cross-encoder on the uncertain band),
-and an entity-level decision rule that maximises expected F0.5 per Source-1 entity. Normalisation
+and an entity-level decision rule that maximises expected F0.5 per Source-1 entity. Candidate generation
+runs on CPU in 40 minutes for the 1.73M test S1s and hands the matcher about 16 pairs per S1 out of
+6.7e12 possible (section 3.5). Normalisation
 vocabularies (legal forms, regions, region aliases, a romanised-token dictionary for India's native-script
 records) are mined from the provided data, so the same code runs on France, which never appears in
 training. Our first two leaderboard uploads taught us that dev OOF can be blind to a test-only failure: the
