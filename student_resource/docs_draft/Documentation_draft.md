@@ -324,7 +324,7 @@ The same checks for India: records in no list 5.3% -> 0.6%, links per S1 3.18 ->
 | v2: stage B | 0.97898 [0.97876, 0.97923] | 0.98167 | 0.97484 | 0.97274 | - | `0926-103648-decide` |
 | v3: + C7, generator/consistency features, stage B | 0.98049 [0.98025, 0.98073] | 0.98308 | 0.97649 | 0.97424 | 0.938 (upload 2) | `kaggle-0926-102147-decide` |
 | v5 on decoy dev (Kaggle CPU; killed by the 12 h session limit in the test stages, no file) | 0.97981 | 0.98254 | 0.97559 | - | - | `cpuv4-0926-230232-decide` |
-| **final: v7 on decoy dev, stage B** | **0.98060 [0.98037, 0.98083]** | 0.98292 | 0.97700 | 0.97792 | [upload 3 public score] | `v7b-0927-074428-decide` |
+| **final: v7 on decoy dev, stage B** | **0.98060 [0.98037, 0.98083]** | 0.98292 | 0.97700 | 0.97792 | 0.971 (upload 3) | `v7b-0927-074428-decide` |
 
 Oracles for v3 (`kaggle-0926-102147-decide`): perfect decisions on the retrieved candidates would score
 0.99402, and predicting every true singleton empty would score 0.98192. For the final run, perfect
@@ -423,8 +423,8 @@ uploaded, whatever its OOF.
 
 The final run (`config_v7.yaml`) scores 0.98060 [0.98037, 0.98083] OOF on the decoy dev with stage B and two
 thresholds, a paired gain of +0.00073 [+0.00056, +0.00090] over config_v5; it passes the acceptance check in
-all three countries and every France check against upload 1, and it scored [upload 3 public score] on the
-public leaderboard (upload 1: 0.960).
+all three countries and every France check against upload 1, and it scored 0.971 on the
+public leaderboard (upload 1: 0.960), so it is the submission that counts.
 
 What we would keep from this: the leaderboard caught a failure that 1,000 bootstrap resamples of dev could
 not, because dev and test differed in structure, not in noise level. Measuring the structure of the

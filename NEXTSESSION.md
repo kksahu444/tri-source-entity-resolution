@@ -3,7 +3,21 @@
 Handoff for teammates and for any fresh Claude/Codex session after a context reset. Read this
 first, then `CLAUDE.md`. Update the "State" and "Open items" sections before you stop working.
 
-Last updated: 27 Sep 2026, 06:40 IST, by Ashutosh.
+Last updated: 27 Sep 2026, 21:10 IST, by Aditya (the sections below the update are Ashutosh's, 06:40 IST).
+
+## Update 27 Sep 21:10 IST
+
+- **Upload 3 = public 0.971**, the best public upload, so it is the one that counts (upload 1: 0.960). File:
+  `student_resource/submissions/upload_3/` (config_v7, Kaggle `amlc26-pipeline-v7b`, run log in
+  `student_resource/runs/kaggle_v7b/`), dev OOF 0.98060 on the decoy dev, acceptance and France checks pass.
+- **Final zip built** from origin/adi (fdb3bf3 and later) with output/ = upload 3 and the methodology draft filled
+  (no `[FINAL]` gaps left; team name and members still to fill in the header).
+- config_v7 = iteration 5 (decoys) + France fixes found without labels (`student_resource/runs/france_research.md`):
+  numbering markers ("N°") and department aliases mined per country, zero-padded numbers, C9 reverse channel.
+- Not run: `config_v8.yaml` (test-like dev pool, 45% of cities; the dev pool held every train record of the
+  country, ~20 records per query S1 against ~5.5 on test) and the cross-encoder (`config_v7ce.yaml` died in stage B).
+  The Kaggle account's weekly GPU quota (30 h) ran out at ~16:05 IST on 27 Sep.
+- Proposed tag (not pushed): `git tag sub/d3-1 111652f`.
 
 Git rule: work on your own branch, commit small and often, push the branch. Before anything goes to
 `main`, merge `origin/main` into the branch and run both test suites (repo root and
