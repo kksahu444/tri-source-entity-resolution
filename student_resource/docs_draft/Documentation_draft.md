@@ -237,8 +237,10 @@ DBA markers, landmark and unit words, and bis/ter (section 7).
   after the stage-B base folds, before a file was written (`runs/france_research.md` section 6). Stage A/B
   now build their feature matrices column by column from Arrow and predict in 2M-row chunks (commit
   bd71889), but a 3-hour stage does not fit the last day next to the France fixes, so config_v7 runs with
-  the cross-encoder off.
-  [FINAL: confirm the cross-encoder is off in the final run.]
+  the cross-encoder off. config_v7ce (commit d542f6b) puts it back sized for one session: the band narrows
+  to stage-A p in [0.02, 0.98], the pairs whose decision can change and roughly half the v5 band, and the
+  bake-off is skipped for the v5 winner, mDeBERTa-v3-base alone.
+  [FINAL: whether the final run has the cross-encoder on (v7ce) or off (v7, v8).]
 - **Calibration:** isotonic regression on the OOF probabilities (US + India pooled); expected calibration
   error 0.00014-0.00017 after calibration (`kaggle-0926-102147-decide`).
 - **Assignment:** each S2/S3 record is kept only for the S1 with its highest calibrated probability.
